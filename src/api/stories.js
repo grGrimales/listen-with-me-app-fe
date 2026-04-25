@@ -19,3 +19,31 @@ export const updateStory = (id, storyData, token) => request(`/api/stories/${id}
   body: JSON.stringify(storyData)
 })
 export const publishStory = (id, token) => request(`/api/stories/${id}/publish`, token, { method: 'POST' })
+
+export async function uploadVoiceAudio(storyId, name, file, token) {
+  const formData = new FormData()
+  formData.append('name', name)
+  formData.append('file', file)
+  const res = await fetch(`${BASE_URL}/api/stories/${storyId}/voices/upload`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || 'Upload failed')
+  return data
+}
+
+export async function uploadParagraphAudio(paragraphId, file, token) {
+  const formData = new FormData()
+  formData.append('file', file)
+  // No Content-Type header — browser sets multipart boundary automatically
+  const res = await fetch(`${BASE_URL}/api/paragraphs/${paragraphId}/audio/upload`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || 'Upload failed')
+  return data
+}
