@@ -99,6 +99,12 @@ export default function HomePage() {
               </Link>
             </>
           )}
+          <Link
+            to="/stats"
+            className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition flex items-center gap-1.5"
+          >
+            📊 Stats
+          </Link>
           <span className="text-sm text-stone-500 hidden sm:block">
             Hi, <span className="text-stone-700 font-medium">{user?.fullName}</span>
           </span>

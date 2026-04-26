@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { getStory } from '../api/stories'
+import { getStory, markStoryAsReviewed } from '../api/stories'
 
 // ── Theme definitions ────────────────────────────────────────────────────────
 const T = {
@@ -96,6 +96,7 @@ const FONT_DEFAULT = 20
 // ── Component ────────────────────────────────────────────────────────────────
 export default function StoryDetailPage() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const { token } = useAuth()
   const [story, setStory] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -118,6 +119,9 @@ export default function StoryDetailPage() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [activeParagraphId, setActiveParagraphId] = useState(null)
+  const [isReviewing, setIsReviewing] = useState(false)
+  const [reviewed, setReviewed] = useState(false)
+  const [showReviewModal, setShowReviewModal] = useState(false)
 
   // Paragraph-mode state
   const [playingParaId, setPlayingParaId] = useState(null)
@@ -231,6 +235,20 @@ export default function StoryDetailPage() {
     audioRef.current.currentTime = ((e.clientX - rect.left) / rect.width) * paraDuration
   }
 
+  async function handleMarkAsReviewed() {
+    setShowReviewModal(false)
+    setIsReviewing(true)
+    try {
+      await markStoryAsReviewed(id, token)
+      // Navigate back to library immediately after success
+      navigate('/')
+    } catch (err) {
+      alert("Error marking as reviewed: " + err.message)
+    } finally {
+      setIsReviewing(false)
+    }
+  }
+
   const isVoiceMode = !!currentVoice
   const hasParagraphAudio = story?.paragraphs?.some(p => p.audio_url)
   const playingPara = story?.paragraphs?.find(p => p.id === playingParaId)
@@ -275,8 +293,37 @@ export default function StoryDetailPage() {
   )
 
   return (
-    <div className={`min-h-screen ${c.page} pb-36 transition-colors duration-300`}>
+    <div className={`min-h-screen ${c.page} pb-36 transition-colors duration-300 relative`}>
       {isVoiceMode ? <audio ref={audioRef} src={currentVoice.audio_url} /> : <audio ref={audioRef} />}
+
+      {/* Review Confirmation Modal */}
+      {showReviewModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-sm bg-stone-900/30">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-8 animate-in fade-in zoom-in duration-200">
+            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center text-3xl mb-6 mx-auto">
+              🌟
+            </div>
+            <h3 className="text-2xl font-bold text-stone-800 text-center mb-2">Mark as Reviewed?</h3>
+            <p className="text-stone-500 text-center mb-8 font-medium">
+              ¿Estás seguro de que quieres marcar esta historia como revisada? Se registrará en tus estadísticas de progreso.
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={handleMarkAsReviewed}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-2xl transition shadow-lg shadow-emerald-200"
+              >
+                Yes, Mark as Reviewed
+              </button>
+              <button
+                onClick={() => setShowReviewModal(false)}
+                className="w-full bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold py-3 rounded-2xl transition"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Nav */}
       <header className={`border-b px-6 py-4 sticky top-0 z-20 transition-colors duration-300 ${c.nav}`}>
@@ -471,9 +518,22 @@ export default function StoryDetailPage() {
 
           <div className={`mt-20 py-12 border-t text-center ${c.divider}`}>
             <p className={`text-sm mb-6 ${c.endText}`}>You've reached the end of the story.</p>
-            <Link to="/" className="inline-block bg-emerald-600 text-white px-8 py-3 rounded-2xl font-bold hover:bg-emerald-500 transition">
-              Back to Library
-            </Link>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <button
+                onClick={() => setShowReviewModal(true)}
+                disabled={isReviewing || reviewed}
+                className={`flex items-center gap-2 px-8 py-3 rounded-2xl font-bold transition-all shadow-lg active:scale-95 ${
+                  reviewed 
+                    ? 'bg-stone-200 text-stone-500 cursor-default' 
+                    : 'bg-white text-emerald-600 border border-emerald-100 hover:border-emerald-600'
+                }`}
+              >
+                {reviewed ? '✓ Reviewed' : isReviewing ? 'Marking...' : '🌟 Mark as Reviewed'}
+              </button>
+              <Link to="/" className="inline-block bg-emerald-600 text-white px-8 py-3 rounded-2xl font-bold hover:bg-emerald-500 transition shadow-lg">
+                Back to Library
+              </Link>
+            </div>
           </div>
         </div>
 

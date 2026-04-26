@@ -78,3 +78,6 @@ export async function uploadParagraphImage(paragraphId, file, token) {
 
 export const deleteParagraphImage = (imageId, token) => 
   request(`/api/paragraphs/images/${imageId}`, token, { method: 'DELETE' })
+
+export const markStoryAsReviewed = (id, token) => request(`/api/stories/${id}/review`, token, { method: 'POST' })
+export const getUserStats = (token) => request('/api/stats', token)
