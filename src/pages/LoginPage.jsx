@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext'
 export default function LoginPage() {
   const navigate = useNavigate()
   const { saveAuth } = useAuth()
-  const [form, setForm] = useState({ email: 'admin@listenwithme.com', password: 'admin1234' })
+  const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
