@@ -5,19 +5,31 @@ async function request(path, token, options = {}) {
   if (token) {
     headers['Authorization'] = `Bearer ${token}`
   }
-  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers })
   
-  let data
-  const contentType = res.headers.get('content-type')
-  if (contentType && contentType.includes('application/json')) {
-    data = await res.json()
-  } else {
-    const text = await res.text()
-    data = { error: text || res.statusText }
-  }
+  console.log(`[API Request] ${options.method || 'GET'} ${BASE_URL}${path}`)
+  
+  try {
+    const res = await fetch(`${BASE_URL}${path}`, { ...options, headers })
+    console.log(`[API Response] Status: ${res.status}`)
+    
+    let data
+    const contentType = res.headers.get('content-type')
+    if (contentType && contentType.includes('application/json')) {
+      data = await res.json()
+    } else {
+      const text = await res.text()
+      data = { error: text || res.statusText }
+    }
 
-  if (!res.ok) throw new Error(data.error || 'Something went wrong')
-  return data
+    if (!res.ok) {
+      console.error('[API Error Data]', data)
+      throw new Error(data.error || 'Something went wrong')
+    }
+    return data
+  } catch (err) {
+    console.error('[API Fetch Error]', err)
+    throw err
+  }
 }
 
 export const getStories = (token, playlistId) => {
