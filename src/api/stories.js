@@ -20,7 +20,10 @@ async function request(path, token, options = {}) {
   return data
 }
 
-export const getStories = (token) => request('/api/stories', token)
+export const getStories = (token, playlistId) => {
+  const url = playlistId ? `/api/stories?playlist_id=${playlistId}` : '/api/stories'
+  return request(url, token)
+}
 export const getDeletedStories = (token) => request('/api/admin/stories/trash-items', token)
 export const getStory = (id, token) => request(`/api/stories/${id}`, token)
 
@@ -81,3 +84,21 @@ export const deleteParagraphImage = (imageId, token) =>
 
 export const markStoryAsReviewed = (id, token) => request(`/api/stories/${id}/review`, token, { method: 'POST' })
 export const getUserStats = (token) => request('/api/stats', token)
+
+// Playlists
+export const getPlaylists = (token) => request('/api/playlists', token)
+export const createPlaylist = (data, token) => request('/api/playlists', token, {
+  method: 'POST',
+  body: JSON.stringify(data)
+})
+export const updatePlaylist = (id, data, token) => request(`/api/playlists/${id}`, token, {
+  method: 'PUT',
+  body: JSON.stringify(data)
+})
+export const deletePlaylist = (id, token) => request(`/api/playlists/${id}`, token, { method: 'DELETE' })
+export const addStoryToPlaylist = (playlistId, storyId, token) => request(`/api/playlists/${playlistId}/stories`, token, {
+  method: 'POST',
+  body: JSON.stringify({ story_id: storyId })
+})
+export const removeStoryFromPlaylist = (playlistId, storyId, token) => 
+  request(`/api/playlists/${playlistId}/stories/${storyId}`, token, { method: 'DELETE' })

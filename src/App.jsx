@@ -9,6 +9,7 @@ import StoryDetailPage from './pages/StoryDetailPage'
 import AssetsManagerPage from './pages/AssetsManagerPage'
 import DeletedStoriesPage from './pages/DeletedStoriesPage'
 import StatsPage from './pages/StatsPage'
+import PlaylistsPage from './pages/PlaylistsPage'
 
 export default function App() {
   return (
@@ -70,6 +71,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <StatsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/playlists"
+            element={
+              <ProtectedRoute>
+                <PlaylistsPage />
               </ProtectedRoute>
             }
           />
