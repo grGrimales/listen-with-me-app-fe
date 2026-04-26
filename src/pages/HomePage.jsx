@@ -33,7 +33,9 @@ export default function HomePage() {
     try {
       await deleteStory(deletingId, token)
       setDeletingId(null)
-      loadStories()
+      await loadStories()
+      // Optional: navigate to trash to see it there
+      navigate('/admin/stories/trash')
     } catch (err) {
       alert(err.message)
     }
@@ -82,12 +84,20 @@ export default function HomePage() {
         </div>
         <div className="flex items-center gap-5">
           {isAdmin && (
-            <Link
-              to="/admin/stories/create"
-              className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2 rounded-xl transition shadow-sm"
-            >
-              + Create Story
-            </Link>
+            <>
+              <Link
+                to="/admin/stories/trash"
+                className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition"
+              >
+                🗑️ Trash
+              </Link>
+              <Link
+                to="/admin/stories/create"
+                className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2 rounded-xl transition shadow-sm"
+              >
+                + Create Story
+              </Link>
+            </>
           )}
           <span className="text-sm text-stone-500 hidden sm:block">
             Hi, <span className="text-stone-700 font-medium">{user?.fullName}</span>

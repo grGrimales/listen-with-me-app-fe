@@ -104,12 +104,14 @@ export default function StoryDetailPage() {
   // Reading preferences (persisted)
   const [showTranslation, setShowTranslation] = useState(false)
   const [showVocabulary, setShowVocabulary] = useState(false)
+  const [showImages, setShowImages] = useState(() => localStorage.getItem('rwm_showImages') !== 'false')
   const [theme, setTheme] = useState(() => localStorage.getItem('rwm_theme') || 'light')
   const [fontSize, setFontSize] = useState(() => Number(localStorage.getItem('rwm_fontSize')) || FONT_DEFAULT)
   const [showSettings, setShowSettings] = useState(false)
 
   useEffect(() => { localStorage.setItem('rwm_theme', theme) }, [theme])
   useEffect(() => { localStorage.setItem('rwm_fontSize', fontSize) }, [fontSize])
+  useEffect(() => { localStorage.setItem('rwm_showImages', showImages) }, [showImages])
 
   // Voice-mode state
   const [currentVoice, setCurrentVoice] = useState(null)
@@ -234,6 +236,28 @@ export default function StoryDetailPage() {
   const playingPara = story?.paragraphs?.find(p => p.id === playingParaId)
   const c = T[theme]
 
+  // Logic to determine which image to show
+  // Default to first paragraph if no active paragraph yet
+  const activePara = story?.paragraphs?.find(p => p.id === activeParagraphId) || story?.paragraphs?.[0]
+  let currentImageUrl = null
+  
+  if (activePara && activePara.images?.length > 0) {
+    if (isVoiceMode && isPlaying && currentVoice) {
+      const ts = currentVoice.timestamps?.find(t => t.paragraph_id === activePara.id)
+      if (ts && ts.end_ms > ts.start_ms) {
+        const elapsedInPara = currentTime - ts.start_ms
+        const paraDuration = ts.end_ms - ts.start_ms
+        const imageIndex = Math.floor((elapsedInPara / paraDuration) * activePara.images.length)
+        const safeIndex = Math.min(Math.max(0, imageIndex), activePara.images.length - 1)
+        currentImageUrl = activePara.images[safeIndex].image_url
+      } else {
+        currentImageUrl = activePara.images[0].image_url
+      }
+    } else {
+      currentImageUrl = activePara.images[0].image_url
+    }
+  }
+
   if (loading) return (
     <div className={`min-h-screen flex items-center justify-center ${c.page}`}>
       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600" />
@@ -350,6 +374,14 @@ export default function StoryDetailPage() {
             >
               📖 Vocabulary
             </button>
+            <button
+              onClick={() => setShowImages(v => !v)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-all ${
+                showImages ? c.chipActive : c.chip
+              }`}
+            >
+              🖼️ Images
+            </button>
           </div>
 
           {/* Voice selector */}
@@ -373,74 +405,121 @@ export default function StoryDetailPage() {
         </div>
       </div>
 
-      {/* Paragraphs */}
-      <div className="max-w-3xl mx-auto px-6">
-        {story.paragraphs?.map((p, idx) => {
-          const isActive = activeParagraphId === p.id
-          const isThisParaPlaying = !isVoiceMode && playingParaId === p.id && paraIsPlaying
+      {/* Main Content Area */}
+      <div className={`max-w-7xl mx-auto px-6 grid grid-cols-1 ${showImages ? 'lg:grid-cols-2' : ''} gap-12 items-start`}>
+        {/* Paragraphs Column */}
+        <div className={showImages ? 'max-w-2xl' : 'max-w-3xl mx-auto w-full'}>
+          {story.paragraphs?.map((p, idx) => {
+            const isActive = activeParagraphId === p.id
+            const isThisParaPlaying = !isVoiceMode && playingParaId === p.id && paraIsPlaying
 
-          return (
-            <div key={p.id} className={`mb-14 transition-all duration-500 rounded-3xl p-4 -mx-4 ${isActive ? c.paraActive : ''}`}>
-              <div className="flex items-start gap-3 mb-4">
-                <span className={`font-mono text-sm flex-shrink-0 mt-1 transition-colors ${isActive ? c.paraNumActive : c.paraNumIdle}`}>
-                  {(idx + 1).toString().padStart(2, '0')}
-                </span>
+            return (
+              <div key={p.id} className={`mb-14 transition-all duration-500 rounded-3xl p-4 -mx-4 ${isActive ? c.paraActive : ''}`}>
+                <div className="flex items-start gap-3 mb-4">
+                  <span className={`font-mono text-sm flex-shrink-0 mt-1 transition-colors ${isActive ? c.paraNumActive : c.paraNumIdle}`}>
+                    {(idx + 1).toString().padStart(2, '0')}
+                  </span>
 
-                <p
-                  onClick={() => isVoiceMode && handleParagraphClick(p.id)}
-                  style={{ fontSize: `${fontSize}px` }}
-                  className={`flex-1 leading-relaxed font-serif transition-colors duration-300 ${isVoiceMode ? 'cursor-pointer' : ''} ${isActive ? c.paraTextActive : c.paraText}`}
-                >
-                  {p.content}
-                </p>
-
-                {!isVoiceMode && p.audio_url && (
-                  <button
-                    onClick={() => toggleParagraph(p)}
-                    className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all ${
-                      isThisParaPlaying
-                        ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/20'
-                        : c.playBtn
-                    }`}
+                  <p
+                    onClick={() => isVoiceMode && handleParagraphClick(p.id)}
+                    style={{ fontSize: `${fontSize}px` }}
+                    className={`flex-1 leading-relaxed font-serif transition-colors duration-300 ${isVoiceMode ? 'cursor-pointer' : ''} ${isActive ? c.paraTextActive : c.paraText}`}
                   >
-                    {isThisParaPlaying
-                      ? <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
-                      : <svg className="w-4 h-4 translate-x-px" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" /></svg>
-                    }
-                  </button>
+                    {p.content}
+                  </p>
+
+                  {!isVoiceMode && p.audio_url && (
+                    <button
+                      onClick={() => toggleParagraph(p)}
+                      className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all ${
+                        isThisParaPlaying
+                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/20'
+                          : c.playBtn
+                      }`}
+                    >
+                      {isThisParaPlaying
+                        ? <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
+                        : <svg className="w-4 h-4 translate-x-px" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" /></svg>
+                      }
+                    </button>
+                  )}
+                </div>
+
+                {showTranslation && p.translations?.length > 0 && (
+                  <div className={`ml-8 rounded-2xl px-5 py-4 border mb-3 transition-all duration-300 ${isActive ? c.transCardActive : c.transCard}`}>
+                    <span className={`text-[10px] font-bold uppercase tracking-widest block mb-2 ${isActive ? c.transLabelActive : c.transLabel}`}>Translation</span>
+                    {p.translations.map(t => (
+                      <p key={t.id} className={`text-base leading-relaxed italic ${c.transText}`}>{t.content}</p>
+                    ))}
+                  </div>
+                )}
+
+                {showVocabulary && p.vocabulary?.length > 0 && (
+                  <div className="ml-8 mt-2 flex flex-wrap gap-2">
+                    {p.vocabulary.map(v => (
+                      <div key={v.id} className={`px-3 py-1.5 rounded-xl text-sm border shadow-sm ${c.vocabChip}`}>
+                        <span className="font-bold text-emerald-600">{v.word}</span>
+                        <span className="opacity-30 mx-1.5">·</span>
+                        <span>{v.definition}</span>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
+            )
+          })}
 
-              {showTranslation && p.translations?.length > 0 && (
-                <div className={`ml-8 rounded-2xl px-5 py-4 border mb-3 transition-all duration-300 ${isActive ? c.transCardActive : c.transCard}`}>
-                  <span className={`text-[10px] font-bold uppercase tracking-widest block mb-2 ${isActive ? c.transLabelActive : c.transLabel}`}>Translation</span>
-                  {p.translations.map(t => (
-                    <p key={t.id} className={`text-base leading-relaxed italic ${c.transText}`}>{t.content}</p>
-                  ))}
-                </div>
-              )}
-
-              {showVocabulary && p.vocabulary?.length > 0 && (
-                <div className="ml-8 mt-2 flex flex-wrap gap-2">
-                  {p.vocabulary.map(v => (
-                    <div key={v.id} className={`px-3 py-1.5 rounded-xl text-sm border shadow-sm ${c.vocabChip}`}>
-                      <span className="font-bold text-emerald-600">{v.word}</span>
-                      <span className="opacity-30 mx-1.5">·</span>
-                      <span>{v.definition}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )
-        })}
-
-        <div className={`mt-20 py-12 border-t text-center ${c.divider}`}>
-          <p className={`text-sm mb-6 ${c.endText}`}>You've reached the end of the story.</p>
-          <Link to="/" className="inline-block bg-emerald-600 text-white px-8 py-3 rounded-2xl font-bold hover:bg-emerald-500 transition">
-            Back to Library
-          </Link>
+          <div className={`mt-20 py-12 border-t text-center ${c.divider}`}>
+            <p className={`text-sm mb-6 ${c.endText}`}>You've reached the end of the story.</p>
+            <Link to="/" className="inline-block bg-emerald-600 text-white px-8 py-3 rounded-2xl font-bold hover:bg-emerald-500 transition">
+              Back to Library
+            </Link>
+          </div>
         </div>
+
+        {/* Visual Content Column (Sticky) */}
+        {showImages && (
+          <div className="hidden lg:block sticky top-32 max-w-sm ml-auto w-full">
+            <div className="aspect-[4/3] rounded-[2rem] overflow-hidden bg-stone-100 shadow-xl border border-stone-200/50 relative group">
+              {currentImageUrl ? (
+                <>
+                  {/* Blurred background layer for "fill" effect */}
+                  <img 
+                    src={currentImageUrl} 
+                    className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-30 scale-110" 
+                    alt="" 
+                  />
+                  {/* Main sharp image */}
+                  <img 
+                    key={currentImageUrl}
+                    src={currentImageUrl} 
+                    className="relative w-full h-full object-contain animate-in fade-in zoom-in-95 duration-500" 
+                    alt="" 
+                  />
+                </>
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center text-stone-300 gap-4">
+                  <span className="text-6xl opacity-10">📖</span>
+                  <p className="text-xs font-medium opacity-40">Ready to start</p>
+                </div>
+              )}
+              
+              {/* Subtle inner shadow overlay */}
+              <div className="absolute inset-0 ring-1 ring-inset ring-black/5 rounded-[2rem] pointer-events-none" />
+            </div>
+            
+            {/* Image indicator dot for multi-image paragraphs */}
+            {activePara?.images?.length > 1 && (
+               <div className="mt-4 flex justify-center gap-1.5">
+                 {activePara.images.map((_, i) => {
+                    const ts = currentVoice?.timestamps?.find(t => t.paragraph_id === activePara.id)
+                    const idx = ts ? Math.min(Math.max(0, Math.floor(((currentTime - ts.start_ms) / (ts.end_ms - ts.start_ms)) * activePara.images.length)), activePara.images.length - 1) : 0
+                    return <div key={i} className={`h-1 rounded-full transition-all duration-300 ${i === idx ? 'w-6 bg-emerald-500' : 'w-1 bg-stone-300'}`} />
+                 })}
+               </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Floating player — Voice mode */}

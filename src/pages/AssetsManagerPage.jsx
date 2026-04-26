@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { getStory, updateStory, uploadParagraphAudio } from '../api/stories'
+import { getStory, updateStory, uploadParagraphAudio, deleteParagraphAudio, uploadParagraphImage, deleteParagraphImage } from '../api/stories'
 
 export default function AssetsManagerPage() {
   const { id } = useParams()
@@ -29,6 +29,18 @@ export default function AssetsManagerPage() {
     setTimeout(() => setSuccess(''), 3000)
   }
 
+  async function handleDeleteAudio(pId) {
+    if (!window.confirm('Are you sure you want to delete this audio?')) return
+    setError('')
+    try {
+      await deleteParagraphAudio(pId, token)
+      notify('Audio deleted!')
+      loadStory()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   async function handleUpdateMetadata(e) {
     e.preventDefault()
     setError('')
@@ -41,7 +53,10 @@ export default function AssetsManagerPage() {
       cover_url: fd.get('cover_url'),
       category_id: parseInt(fd.get('category_id')),
       paragraphs: story.paragraphs.map(p => ({
-        ...p,
+        position: p.position,
+        content: p.content,
+        audio_url: p.audio_url,
+        images: p.images?.map(img => img.image_url) || [],
         translations: p.translations.map(t => ({ language: t.language, content: t.content })),
         vocabulary: p.vocabulary.map(v => ({ word: v.word, definition: v.definition })),
       })),
@@ -55,22 +70,12 @@ export default function AssetsManagerPage() {
     }
   }
 
-  async function handleUpdateParagraphImage(pId, imageUrl) {
+  async function handleDeleteImage(imgId) {
+    if (!window.confirm('Are you sure you want to delete this image?')) return
     setError('')
-    const updated = {
-      ...story,
-      paragraphs: story.paragraphs.map(p => {
-        const base = p.id === pId ? { ...p, image_url: imageUrl } : p
-        return {
-          ...base,
-          translations: base.translations.map(t => ({ language: t.language, content: t.content })),
-          vocabulary: base.vocabulary.map(v => ({ word: v.word, definition: v.definition })),
-        }
-      }),
-    }
     try {
-      await updateStory(id, updated, token)
-      notify('Image updated!')
+      await deleteParagraphImage(imgId, token)
+      notify('Image deleted!')
       loadStory()
     } catch (err) {
       setError(err.message)
@@ -138,8 +143,10 @@ export default function AssetsManagerPage() {
                 paragraph={p}
                 index={i}
                 token={token}
-                onImageSave={(url) => handleUpdateParagraphImage(p.id, url)}
                 onAudioUploaded={() => { loadStory(); notify('Audio uploaded!') }}
+                onAudioDeleted={() => handleDeleteAudio(p.id)}
+                onImageUploaded={() => { loadStory(); notify('Image uploaded!') }}
+                onImageDeleted={(imgId) => handleDeleteImage(imgId)}
                 onError={setError}
               />
             ))}
@@ -150,9 +157,7 @@ export default function AssetsManagerPage() {
   )
 }
 
-function ParagraphAssetCard({ paragraph: p, index, token, onImageSave, onAudioUploaded, onError }) {
-  const imgInputRef = useRef(null)
-
+function ParagraphAssetCard({ paragraph: p, index, token, onAudioUploaded, onAudioDeleted, onImageUploaded, onImageDeleted, onError }) {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden">
       {/* Header */}
@@ -163,41 +168,62 @@ function ParagraphAssetCard({ paragraph: p, index, token, onImageSave, onAudioUp
         <p className="text-sm text-stone-600 line-clamp-1">"{p.content}"</p>
       </div>
 
-      <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Image */}
+      <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* Images Section */}
         <div>
-          <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-3">Image</p>
-          <div className="flex gap-3 items-start">
-            <div className="w-20 h-20 bg-stone-100 rounded-xl overflow-hidden flex-shrink-0">
-              {p.image_url
-                ? <img src={p.image_url} className="w-full h-full object-cover" alt="" />
-                : <div className="w-full h-full flex items-center justify-center text-stone-300 text-xs text-center leading-tight px-1">No image</div>
-              }
-            </div>
-            <div className="flex-1 space-y-2">
-              <input
-                ref={imgInputRef}
-                defaultValue={p.image_url}
-                placeholder="https://..."
-                className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm"
-              />
-              <button
-                onClick={() => onImageSave(imgInputRef.current.value)}
-                className="w-full bg-stone-700 text-white px-3 py-1.5 rounded-xl text-sm hover:bg-stone-600 transition"
-              >
-                Save image
-              </button>
-            </div>
+          <div className="flex justify-between items-center mb-4">
+            <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide">Images ({p.images?.length || 0}/5)</p>
           </div>
+          
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            {p.images?.map((img) => (
+              <div key={img.id} className="relative aspect-square bg-stone-100 rounded-xl overflow-hidden group">
+                <img src={img.image_url} className="w-full h-full object-cover" alt="" />
+                <button
+                  onClick={() => onImageDeleted(img.id)}
+                  className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-lg opacity-0 group-hover:opacity-100 transition shadow-sm"
+                  title="Delete image"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+            {[...Array(5 - (p.images?.length || 0))].map((_, i) => (
+              <div key={`empty-${i}`} className="aspect-square border-2 border-dashed border-stone-200 rounded-xl flex items-center justify-center text-stone-300">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6.75a1.5 1.5 0 00-1.5-1.5H2.25A1.5 1.5 0 00.75 6.75v10.5a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                </svg>
+              </div>
+            ))}
+          </div>
+
+          {(p.images?.length || 0) < 5 ? (
+            <ImageUploadButton paragraphId={p.id} token={token} onSuccess={onImageUploaded} onError={onError} />
+          ) : (
+            <p className="text-xs text-amber-600 font-medium text-center bg-amber-50 py-2 rounded-xl">Maximum images reached</p>
+          )}
         </div>
 
-        {/* Audio */}
+        {/* Audio Section */}
         <div>
-          <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-3">Audio</p>
+          <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-4">Audio</p>
           {p.audio_url ? (
-            <div className="space-y-3">
-              <audio src={p.audio_url} controls className="w-full h-9" />
-              <p className="text-xs text-stone-400 truncate">{p.audio_url}</p>
+            <div className="space-y-4">
+              <audio src={p.audio_url} controls className="w-full h-10" />
+              <div className="flex items-center gap-2 bg-stone-50 p-2 rounded-xl border border-stone-100">
+                <p className="text-[10px] text-stone-400 truncate flex-1 font-mono">{p.audio_url}</p>
+                <button 
+                  onClick={onAudioDeleted}
+                  className="text-red-500 hover:text-red-700 p-1.5 rounded-lg hover:bg-red-100 transition"
+                  title="Delete audio"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
               <AudioUploadButton paragraphId={p.id} token={token} onSuccess={onAudioUploaded} onError={onError} label="Replace audio" />
             </div>
           ) : (
@@ -205,6 +231,115 @@ function ParagraphAssetCard({ paragraph: p, index, token, onImageSave, onAudioUp
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+function ImageUploadButton({ paragraphId, token, onSuccess, onError }) {
+  const [file, setFile] = useState(null)
+  const [uploading, setUploading] = useState(false)
+  const [dragging, setDragging] = useState(false)
+  const fileRef = useRef(null)
+  const dragCounter = useRef(0)
+
+  function pickFile(f) {
+    if (f && f.type.startsWith('image/')) {
+      setFile(f)
+      onError('')
+    } else if (f) {
+      onError('Please select an image file (PNG, JPG, etc.)')
+    }
+  }
+
+  function onDragEnter(e) {
+    e.preventDefault()
+    dragCounter.current++
+    setDragging(true)
+  }
+
+  function onDragLeave(e) {
+    e.preventDefault()
+    dragCounter.current--
+    if (dragCounter.current === 0) setDragging(false)
+  }
+
+  function onDragOver(e) { e.preventDefault() }
+
+  function onDrop(e) {
+    e.preventDefault()
+    dragCounter.current = 0
+    setDragging(false)
+    const f = e.dataTransfer.files[0]
+    if (f) pickFile(f)
+  }
+
+  async function handleUpload() {
+    if (!file) return
+    setUploading(true)
+    onError('')
+    try {
+      await uploadParagraphImage(paragraphId, file, token)
+      setFile(null)
+      if (fileRef.current) fileRef.current.value = ''
+      onSuccess()
+    } catch (err) {
+      onError(err.message)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div
+        onClick={() => fileRef.current?.click()}
+        onDragEnter={onDragEnter}
+        onDragLeave={onDragLeave}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
+        className={`
+          relative flex flex-col items-center justify-center gap-2
+          border-2 border-dashed rounded-2xl px-4 py-6 cursor-pointer
+          transition-all select-none
+          ${dragging
+            ? 'border-emerald-400 bg-emerald-50 scale-[1.02]'
+            : file
+              ? 'border-emerald-300 bg-emerald-50/50'
+              : 'border-stone-200 bg-stone-50 hover:border-stone-300 hover:bg-stone-100'
+          }
+        `}
+      >
+        <svg className={`w-8 h-8 ${dragging || file ? 'text-emerald-500' : 'text-stone-300'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6.75a1.5 1.5 0 00-1.5-1.5H2.25A1.5 1.5 0 00.75 6.75v10.5a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+        </svg>
+        
+        {file ? (
+          <div className="text-center">
+            <p className="text-xs text-emerald-700 font-bold truncate max-w-[150px]">{file.name}</p>
+            <p className="text-[10px] text-emerald-500">{(file.size / 1024).toFixed(0)} KB</p>
+          </div>
+        ) : (
+          <p className="text-xs text-stone-400 text-center font-medium">
+            {dragging ? 'Drop image here' : 'Drop image or click to browse'}
+          </p>
+        )}
+
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={e => pickFile(e.target.files[0])}
+        />
+      </div>
+
+      <button
+        onClick={handleUpload}
+        disabled={!file || uploading}
+        className="w-full bg-emerald-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-emerald-500 transition shadow-sm disabled:opacity-50 disabled:grayscale"
+      >
+        {uploading ? 'Uploading Image...' : 'Confirm Upload'}
+      </button>
     </div>
   )
 }
@@ -260,7 +395,6 @@ function AudioUploadButton({ paragraphId, token, onSuccess, onError, label }) {
 
   return (
     <div className="space-y-2">
-      {/* Drop zone — also opens file picker on click */}
       <div
         onClick={() => fileRef.current?.click()}
         onDragEnter={onDragEnter}
@@ -269,7 +403,7 @@ function AudioUploadButton({ paragraphId, token, onSuccess, onError, label }) {
         onDrop={onDrop}
         className={`
           relative flex flex-col items-center justify-center gap-1
-          border-2 border-dashed rounded-xl px-4 py-5 cursor-pointer
+          border-2 border-dashed rounded-xl px-4 py-4 cursor-pointer
           transition-colors select-none
           ${dragging
             ? 'border-emerald-400 bg-emerald-50'
@@ -279,17 +413,16 @@ function AudioUploadButton({ paragraphId, token, onSuccess, onError, label }) {
           }
         `}
       >
-        <svg className={`w-6 h-6 ${dragging || file ? 'text-emerald-500' : 'text-stone-300'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <svg className={`w-5 h-5 ${dragging || file ? 'text-emerald-500' : 'text-stone-300'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l3-3m0 0l3 3m-3-3v12M5.25 19.5h13.5" />
         </svg>
         {file ? (
-          <p className="text-xs text-emerald-700 font-medium text-center">
-            {file.name}<br />
-            <span className="text-emerald-500 font-normal">{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+          <p className="text-[10px] text-emerald-700 font-medium text-center truncate w-full px-2">
+            {file.name}
           </p>
         ) : (
-          <p className="text-xs text-stone-400 text-center">
-            {dragging ? 'Drop to select' : 'Drop audio or click to browse'}
+          <p className="text-[10px] text-stone-400 text-center">
+            {dragging ? 'Drop audio' : 'Drop or browse audio'}
           </p>
         )}
         <input
@@ -304,7 +437,7 @@ function AudioUploadButton({ paragraphId, token, onSuccess, onError, label }) {
       <button
         onClick={handleUpload}
         disabled={!file || uploading}
-        className="w-full bg-emerald-600 text-white px-3 py-1.5 rounded-xl text-sm font-medium hover:bg-emerald-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full bg-stone-800 text-white px-3 py-2 rounded-xl text-xs font-bold hover:bg-stone-700 transition disabled:opacity-50"
       >
         {uploading ? 'Uploading…' : label}
       </button>

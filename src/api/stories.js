@@ -6,14 +6,26 @@ async function request(path, token, options = {}) {
     headers['Authorization'] = `Bearer ${token}`
   }
   const res = await fetch(`${BASE_URL}${path}`, { ...options, headers })
-  const data = await res.json()
+  
+  let data
+  const contentType = res.headers.get('content-type')
+  if (contentType && contentType.includes('application/json')) {
+    data = await res.json()
+  } else {
+    const text = await res.text()
+    data = { error: text || res.statusText }
+  }
+
   if (!res.ok) throw new Error(data.error || 'Something went wrong')
   return data
 }
 
 export const getStories = (token) => request('/api/stories', token)
+export const getDeletedStories = (token) => request('/api/admin/stories/trash-items', token)
 export const getStory = (id, token) => request(`/api/stories/${id}`, token)
+
 export const deleteStory = (id, token) => request(`/api/stories/${id}`, token, { method: 'DELETE' })
+export const restoreStory = (id, token) => request(`/api/stories/${id}/restore`, token, { method: 'POST' })
 export const updateStory = (id, storyData, token) => request(`/api/stories/${id}`, token, {
   method: 'PUT',
   body: JSON.stringify(storyData)
@@ -47,3 +59,22 @@ export async function uploadParagraphAudio(paragraphId, file, token) {
   if (!res.ok) throw new Error(data.error || 'Upload failed')
   return data
 }
+
+export const deleteParagraphAudio = (paragraphId, token) => 
+  request(`/api/paragraphs/${paragraphId}/audio`, token, { method: 'DELETE' })
+
+export async function uploadParagraphImage(paragraphId, file, token) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await fetch(`${BASE_URL}/api/paragraphs/${paragraphId}/images/upload`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || 'Upload failed')
+  return data
+}
+
+export const deleteParagraphImage = (imageId, token) => 
+  request(`/api/paragraphs/images/${imageId}`, token, { method: 'DELETE' })

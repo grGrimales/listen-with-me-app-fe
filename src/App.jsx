@@ -7,6 +7,7 @@ import HomePage from './pages/HomePage'
 import CreateStoryPage from './pages/CreateStoryPage'
 import StoryDetailPage from './pages/StoryDetailPage'
 import AssetsManagerPage from './pages/AssetsManagerPage'
+import DeletedStoriesPage from './pages/DeletedStoriesPage'
 
 export default function App() {
   return (
@@ -36,6 +37,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <CreateStoryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/stories/trash"
+            element={
+              <ProtectedRoute>
+                <DeletedStoriesPage />
               </ProtectedRoute>
             }
           />

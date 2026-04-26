@@ -34,7 +34,8 @@ export default function CreateStoryPage() {
         paragraphs: story.paragraphs.map(p => ({
           position: p.position,
           content: p.content,
-          image_url: p.image_url,
+          images: p.images?.map(img => img.image_url) || [],
+          audio_url: p.audio_url,
           translations: p.translations.map(t => ({ language: t.language, content: t.content })),
           vocabulary: p.vocabulary.map(v => ({ word: v.word, definition: v.definition }))
         })),
@@ -218,7 +219,7 @@ const defaultStory = {
     {
       position: 1,
       content: "Deep in the heart of the mountains, there was a forest where no birds sang.",
-      image_url: "",
+      images: [],
       translations: [
         { language: "es", content: "En lo profundo del corazón de las montañas, había un bosque donde ningún pájaro cantaba." }
       ],
