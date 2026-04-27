@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { getStory, markStoryAsReviewed } from '../api/stories'
+import { getStory, markStoryAsReviewed, getUserVocabulary, addUserVocabulary, deleteUserVocabulary } from '../api/stories'
 
 // ── Theme definitions ────────────────────────────────────────────────────────
 const T = {
@@ -109,6 +109,21 @@ export default function StoryDetailPage() {
   const [theme, setTheme] = useState(() => localStorage.getItem('rwm_theme') || 'light')
   const [fontSize, setFontSize] = useState(() => Number(localStorage.getItem('rwm_fontSize')) || FONT_DEFAULT)
   const [showSettings, setShowSettings] = useState(false)
+  const [isSticky, setIsSticky] = useState(false)
+
+  const controlsRef = useRef(null)
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (controlsRef.current) {
+        const rect = controlsRef.current.getBoundingClientRect()
+        // We consider it "sticky" when it reaches the header (approx 69px)
+        setIsSticky(rect.top <= 70)
+      }
+    }
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
 
   useEffect(() => { localStorage.setItem('rwm_theme', theme) }, [theme])
   useEffect(() => { localStorage.setItem('rwm_fontSize', fontSize) }, [fontSize])
@@ -123,11 +138,17 @@ export default function StoryDetailPage() {
   const [reviewed, setReviewed] = useState(false)
   const [showReviewModal, setShowReviewModal] = useState(false)
 
+  // User Vocabulary state
+  const [userVocab, setUserVocab] = useState([])
+  const [selectedText, setSelectedText] = useState('')
+  const [selectionBox, setSelectionBox] = useState(null)
+
   // Paragraph-mode state
   const [playingParaId, setPlayingParaId] = useState(null)
   const [paraIsPlaying, setParaIsPlaying] = useState(false)
   const [paraCurrentTime, setParaCurrentTime] = useState(0)
   const [paraDuration, setParaDuration] = useState(0)
+  const [isLooping, setIsLooping] = useState(false)
 
   const audioRef = useRef(null)
   const settingsRef = useRef(null)
@@ -135,9 +156,13 @@ export default function StoryDetailPage() {
   useEffect(() => {
     async function load() {
       try {
-        const data = await getStory(id, token)
-        setStory(data)
-        if (data.voices?.length > 0) setCurrentVoice(data.voices[0])
+        const [storyData, vocabData] = await Promise.all([
+          getStory(id, token),
+          getUserVocabulary(id, token)
+        ])
+        setStory(storyData)
+        setUserVocab(vocabData)
+        if (storyData.voices?.length > 0) setCurrentVoice(storyData.voices[0])
       } catch (err) {
         setError(err.message)
       } finally {
@@ -146,6 +171,97 @@ export default function StoryDetailPage() {
     }
     load()
   }, [id, token])
+
+  // Handle text selection
+  useEffect(() => {
+    function handleSelection() {
+      const selection = window.getSelection()
+      const text = selection.toString().trim()
+      
+      if (text && text.length > 0) {
+        const range = selection.getRangeAt(0)
+        const rect = range.getBoundingClientRect()
+        
+        setSelectedText(text)
+        setSelectionBox({
+          top: rect.top - 45, // Use fixed coordinates relative to viewport
+          left: rect.left + rect.width / 2,
+        })
+      } else {
+        setSelectedText('')
+        setSelectionBox(null)
+      }
+    }
+
+    document.addEventListener('mouseup', handleSelection)
+    return () => document.removeEventListener('mouseup', handleSelection)
+  }, [])
+
+  async function handleAddVocab() {
+    if (!selectedText) return
+    const textToSave = selectedText
+    const tempId = Date.now() // Stable temp key
+    try {
+      const newItem = await addUserVocabulary(id, textToSave, token)
+      const vocabToAdd = {
+        ...newItem,
+        id: newItem.id || tempId, // Use real ID if available, else temp
+        phrase: newItem.phrase || textToSave
+      }
+      setUserVocab(prev => [vocabToAdd, ...prev])
+      setSelectedText('')
+      setSelectionBox(null)
+      window.getSelection().removeAllRanges()
+    } catch (err) {
+      alert("Error saving vocabulary: " + err.message)
+    }
+  }
+
+  async function handleDeleteVocab(vocabId) {
+    try {
+      await deleteUserVocabulary(vocabId, token)
+      setUserVocab(prev => prev.filter(v => v.id !== vocabId))
+    } catch (err) {
+      alert("Error deleting vocabulary: " + err.message)
+    }
+  }
+
+  function speak(text) {
+    if (!window.speechSynthesis) return
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel()
+    const utterance = new SpeechSynthesisUtterance(text)
+    // Try to detect if it's English (you can make this dynamic if the story has a lang property)
+    utterance.lang = 'en-US' 
+    window.speechSynthesis.speak(utterance)
+  }
+
+  function renderHighlightedText(text) {
+    if (!showVocabulary || userVocab.length === 0) return text
+
+    // Sort by length descending to match longer phrases first
+    const sortedVocab = [...userVocab].sort((a, b) => b.phrase.length - a.phrase.length)
+    const phrases = sortedVocab.map(v => v.phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    const pattern = new RegExp(`(${phrases.join('|')})`, 'gi')
+    
+    const parts = text.split(pattern)
+    return parts.map((part, i) => {
+      const isMatch = sortedVocab.some(v => v.phrase.toLowerCase() === part.toLowerCase())
+      if (isMatch) {
+        return (
+          <span 
+            key={i} 
+            onClick={(e) => { e.stopPropagation(); speak(part) }}
+            className="cursor-pointer bg-emerald-100/80 text-emerald-900 px-0.5 rounded border-b-2 border-emerald-400 font-bold transition-all hover:bg-emerald-200"
+            title="Click to hear pronunciation"
+          >
+            {part}
+          </span>
+        )
+      }
+      return part
+    })
+  }
 
   // Close settings panel when clicking outside
   useEffect(() => {
@@ -168,11 +284,20 @@ export default function StoryDetailPage() {
       const active = currentVoice.timestamps?.find(ts => ms >= ts.start_ms && ms <= ts.end_ms)
       setActiveParagraphId(active ? active.paragraph_id : null)
     }
-    const onEnded = () => { setIsPlaying(false); setActiveParagraphId(null) }
+    const onEnded = () => { 
+      if (isLooping) {
+        audio.currentTime = 0
+        audio.play()
+        setIsPlaying(true)
+      } else {
+        setIsPlaying(false)
+        setActiveParagraphId(null) 
+      }
+    }
     audio.addEventListener('timeupdate', onTimeUpdate)
     audio.addEventListener('ended', onEnded)
     return () => { audio.removeEventListener('timeupdate', onTimeUpdate); audio.removeEventListener('ended', onEnded) }
-  }, [currentVoice])
+  }, [currentVoice, isLooping])
 
   // Paragraph-mode audio events
   useEffect(() => {
@@ -185,7 +310,14 @@ export default function StoryDetailPage() {
       if (!story) return
       const idx = story.paragraphs.findIndex(p => p.id === playingParaId)
       const next = story.paragraphs.slice(idx + 1).find(p => p.audio_url)
-      if (next) playParagraph(next)
+      
+      if (next) {
+        playParagraph(next)
+      } else if (isLooping) {
+        // Start from first paragraph with audio
+        const first = story.paragraphs.find(p => p.audio_url)
+        if (first) playParagraph(first)
+      }
     }
     audio.addEventListener('timeupdate', onTimeUpdate)
     audio.addEventListener('durationchange', onDurationChange)
@@ -195,7 +327,7 @@ export default function StoryDetailPage() {
       audio.removeEventListener('durationchange', onDurationChange)
       audio.removeEventListener('ended', onEnded)
     }
-  }, [currentVoice, playingParaId, story])
+  }, [currentVoice, playingParaId, story, isLooping])
 
   // Voice-mode controls
   function toggleVoicePlay() {
@@ -296,6 +428,22 @@ export default function StoryDetailPage() {
     <div className={`min-h-screen ${c.page} pb-36 transition-colors duration-300 relative`}>
       {isVoiceMode ? <audio ref={audioRef} src={currentVoice.audio_url} /> : <audio ref={audioRef} />}
 
+      {/* Floating Save Selection Popup */}
+      {selectionBox && (
+        <div 
+          className="fixed z-[60] -translate-x-1/2 animate-in fade-in zoom-in duration-150"
+          style={{ top: selectionBox.top, left: selectionBox.left }}
+        >
+          <button
+            onClick={(e) => { e.stopPropagation(); handleAddVocab() }}
+            className="bg-stone-900 text-white text-xs font-bold px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 hover:bg-emerald-600 transition-colors"
+          >
+            <span>+ Save to Vocabulary</span>
+          </button>
+          <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-stone-900 mx-auto" />
+        </div>
+      )}
+
       {/* Review Confirmation Modal */}
       {showReviewModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-sm bg-stone-900/30">
@@ -326,12 +474,24 @@ export default function StoryDetailPage() {
       )}
 
       {/* Nav */}
-      <header className={`border-b px-6 py-4 sticky top-0 z-20 transition-colors duration-300 ${c.nav}`}>
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <Link to="/" className={`transition font-medium ${c.navLink}`}>← Library</Link>
-          <h1 className={`text-lg font-bold truncate max-w-[200px] sm:max-w-md ${c.navTitle}`}>{story.title}</h1>
-          {/* Reading settings button */}
-          <div className="relative" ref={settingsRef}>
+      <header className={`border-b px-6 py-4 sticky top-0 z-40 transition-colors duration-300 ${c.nav}`}>
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
+          <Link to="/" className={`transition font-medium flex-shrink-0 ${c.navLink}`}>← Library</Link>
+          
+          <h1 className={`text-base font-bold truncate hidden sm:block ${c.navTitle}`}>{story.title}</h1>
+
+          <div className="flex items-center gap-2">
+            {/* Minimal controls visible only on scroll or always in nav for simplicity */}
+            <div className={`flex items-center gap-1 transition-all duration-500 ${isSticky ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'}`}>
+              <button onClick={() => setShowTranslation(v => !v)} className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs border transition-all ${showTranslation ? c.chipActive : c.chip}`}>🌐</button>
+              <button onClick={() => setShowVocabulary(v => !v)} className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs border transition-all ${showVocabulary ? c.chipActive : c.chip}`}>📖</button>
+              <button onClick={() => setShowImages(v => !v)} className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs border transition-all ${showImages ? c.chipActive : c.chip}`}>🖼️</button>
+              <button onClick={() => setIsLooping(v => !v)} className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs border transition-all ${isLooping ? 'bg-amber-500 text-white border-amber-500' : c.chip}`}>🔁</button>
+              <div className="w-px h-4 bg-stone-200 mx-1" />
+            </div>
+
+            {/* Reading settings button */}
+            <div className="relative" ref={settingsRef}>
             <button
               onClick={() => setShowSettings(v => !v)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold border transition-all ${
@@ -388,11 +548,12 @@ export default function StoryDetailPage() {
               </div>
             )}
           </div>
+          </div>
         </div>
       </header>
 
       {/* Hero */}
-      <div className={`border-b mb-8 transition-colors duration-300 ${c.hero}`}>
+      <div className={`border-b transition-colors duration-300 ${c.hero}`}>
         <div className="max-w-4xl mx-auto px-6 py-10 flex flex-col items-center text-center">
           <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-3 py-1 rounded-full mb-4 tracking-widest uppercase">
             Level {story.level}
@@ -401,13 +562,12 @@ export default function StoryDetailPage() {
             {story.title}
           </h2>
           <p className={`text-lg italic transition-colors duration-300 ${c.heroSub}`}>Written by {story.author}</p>
-
-          {/* Translation / Vocabulary toggles — separate from text-format settings */}
-          <div className="flex items-center gap-2 mt-6 flex-wrap justify-center">
-            <span className={`text-xs font-medium mr-1 ${c.heroSub}`}>Show:</span>
+          
+          {/* Hero Controls - Fade out on scroll */}
+          <div ref={controlsRef} className={`mt-8 flex flex-wrap items-center justify-center gap-2 transition-all duration-300 ${isSticky ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'}`}>
             <button
               onClick={() => setShowTranslation(v => !v)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-all ${
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
                 showTranslation ? c.chipActive : c.chip
               }`}
             >
@@ -415,7 +575,7 @@ export default function StoryDetailPage() {
             </button>
             <button
               onClick={() => setShowVocabulary(v => !v)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-all ${
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
                 showVocabulary ? c.chipActive : c.chip
               }`}
             >
@@ -423,21 +583,29 @@ export default function StoryDetailPage() {
             </button>
             <button
               onClick={() => setShowImages(v => !v)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-all ${
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
                 showImages ? c.chipActive : c.chip
               }`}
             >
               🖼️ Images
             </button>
+            <button
+              onClick={() => setIsLooping(v => !v)}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
+                isLooping ? 'bg-amber-500 text-white border-amber-500' : c.chip
+              }`}
+            >
+              🔁 {isLooping ? 'Looping ON' : 'Infinite Play'}
+            </button>
           </div>
 
           {/* Voice selector */}
           {story.voices?.length > 1 && (
-            <div className="mt-6 flex items-center gap-3">
+            <div className="mt-8 flex items-center gap-3">
               <span className={`text-xs font-bold uppercase ${c.settingsLabel}`}>Voice:</span>
               <div className={`flex p-1 rounded-xl ${theme === 'night' ? 'bg-stone-800' : 'bg-stone-100'}`}>
                 {story.voices.map(v => (
-                  <button key={v.id}
+                  <button key={`voice-${v.id}`}
                     onClick={() => { const wasPlaying = isPlaying; setCurrentVoice(v); if (wasPlaying) setTimeout(() => audioRef.current?.play(), 100) }}
                     className={`px-3 py-1 text-xs font-bold rounded-lg transition ${
                       currentVoice?.id === v.id ? 'bg-white text-emerald-700 shadow-sm' : `${c.heroSub} hover:text-emerald-600`
@@ -459,9 +627,14 @@ export default function StoryDetailPage() {
           {story.paragraphs?.map((p, idx) => {
             const isActive = activeParagraphId === p.id
             const isThisParaPlaying = !isVoiceMode && playingParaId === p.id && paraIsPlaying
+            
+            // Filter user vocab that exists in THIS paragraph
+            const vocabInPara = userVocab.filter(v => 
+              p.content.toLowerCase().includes(v.phrase.toLowerCase())
+            )
 
             return (
-              <div key={p.id} className={`mb-14 transition-all duration-500 rounded-3xl p-4 -mx-4 ${isActive ? c.paraActive : ''}`}>
+              <div key={`para-${p.id}`} className={`mb-14 transition-all duration-500 rounded-3xl p-4 -mx-4 ${isActive ? c.paraActive : ''}`}>
                 <div className="flex items-start gap-3 mb-4">
                   <span className={`font-mono text-sm flex-shrink-0 mt-1 transition-colors ${isActive ? c.paraNumActive : c.paraNumIdle}`}>
                     {(idx + 1).toString().padStart(2, '0')}
@@ -472,7 +645,7 @@ export default function StoryDetailPage() {
                     style={{ fontSize: `${fontSize}px` }}
                     className={`flex-1 leading-relaxed font-serif transition-colors duration-300 ${isVoiceMode ? 'cursor-pointer' : ''} ${isActive ? c.paraTextActive : c.paraText}`}
                   >
-                    {p.content}
+                    {renderHighlightedText(p.content)}
                   </p>
 
                   {!isVoiceMode && p.audio_url && (
@@ -496,18 +669,28 @@ export default function StoryDetailPage() {
                   <div className={`ml-8 rounded-2xl px-5 py-4 border mb-3 transition-all duration-300 ${isActive ? c.transCardActive : c.transCard}`}>
                     <span className={`text-[10px] font-bold uppercase tracking-widest block mb-2 ${isActive ? c.transLabelActive : c.transLabel}`}>Translation</span>
                     {p.translations.map(t => (
-                      <p key={t.id} className={`text-base leading-relaxed italic ${c.transText}`}>{t.content}</p>
+                      <p key={`trans-${t.id}`} className={`text-base leading-relaxed italic ${c.transText}`}>{t.content}</p>
                     ))}
                   </div>
                 )}
 
-                {showVocabulary && p.vocabulary?.length > 0 && (
-                  <div className="ml-8 mt-2 flex flex-wrap gap-2">
-                    {p.vocabulary.map(v => (
-                      <div key={v.id} className={`px-3 py-1.5 rounded-xl text-sm border shadow-sm ${c.vocabChip}`}>
-                        <span className="font-bold text-emerald-600">{v.word}</span>
-                        <span className="opacity-30 mx-1.5">·</span>
-                        <span>{v.definition}</span>
+                {showVocabulary && vocabInPara.length > 0 && (
+                  <div className="ml-8 mt-4 flex flex-wrap gap-2 animate-in fade-in slide-in-from-left-2 duration-300">
+                    {vocabInPara.map((v) => (
+                      <div key={`vocab-item-${v.id}`} className={`group flex items-center overflow-hidden rounded-xl text-sm border shadow-sm transition-all hover:border-emerald-300 ${c.vocabChip} border-emerald-100 bg-emerald-50/30`}>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); speak(v.phrase) }}
+                          className="px-3 py-1.5 font-bold text-emerald-700 hover:bg-emerald-100/50 transition-colors flex items-center gap-2"
+                        >
+                          {v.phrase}
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleDeleteVocab(v.id) }}
+                          title="Remove"
+                          className="px-2 py-1.5 text-stone-300 hover:text-red-500 hover:bg-red-50 transition-all border-l border-emerald-100"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
                       </div>
                     ))}
                   </div>

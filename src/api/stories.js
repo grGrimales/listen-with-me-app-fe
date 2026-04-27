@@ -114,3 +114,11 @@ export const addStoryToPlaylist = (playlistId, storyId, token) => request(`/api/
 })
 export const removeStoryFromPlaylist = (playlistId, storyId, token) => 
   request(`/api/playlists/${playlistId}/stories/${storyId}`, token, { method: 'DELETE' })
+
+// User Vocabulary
+export const getUserVocabulary = (storyId, token) => request(`/api/stories/${storyId}/vocabulary`, token)
+export const addUserVocabulary = (storyId, phrase, token) => request(`/api/stories/${storyId}/vocabulary`, token, {
+  method: 'POST',
+  body: JSON.stringify({ phrase })
+})
+export const deleteUserVocabulary = (id, token) => request(`/api/stories/vocabulary/${id}`, token, { method: 'DELETE' })
