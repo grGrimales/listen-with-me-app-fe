@@ -158,7 +158,7 @@ export default function StoryDetailPage() {
       try {
         const [storyData, vocabData] = await Promise.all([
           getStory(id, token),
-          getUserVocabulary(id, token)
+          getUserVocabulary(id, token).catch(() => [])
         ])
         setStory(storyData)
         setUserVocab(vocabData)
