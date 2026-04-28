@@ -253,6 +253,12 @@ export default function HomePage() {
           >
             📂 Playlists
           </Link>
+          <Link
+            to="/zen"
+            className="bg-stone-900 hover:bg-stone-700 text-emerald-400 text-sm font-bold px-4 py-2 rounded-xl transition shadow-sm flex items-center gap-1.5"
+          >
+            🧘 Modo Zen
+          </Link>
           <span className="text-sm text-stone-500 hidden sm:block">
             Hi, <span className="text-stone-700 font-medium">{user?.fullName}</span>
           </span>

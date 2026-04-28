@@ -10,6 +10,7 @@ import AssetsManagerPage from './pages/AssetsManagerPage'
 import DeletedStoriesPage from './pages/DeletedStoriesPage'
 import StatsPage from './pages/StatsPage'
 import PlaylistsPage from './pages/PlaylistsPage'
+import ZenModePage from './pages/ZenModePage'
 
 export default function App() {
   return (
@@ -79,6 +80,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <PlaylistsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/zen"
+            element={
+              <ProtectedRoute>
+                <ZenModePage />
               </ProtectedRoute>
             }
           />

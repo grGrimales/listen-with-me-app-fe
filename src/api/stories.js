@@ -122,3 +122,17 @@ export const addUserVocabulary = (storyId, phrase, token) => request(`/api/stori
   body: JSON.stringify({ phrase })
 })
 export const deleteUserVocabulary = (id, token) => request(`/api/stories/vocabulary/${id}`, token, { method: 'DELETE' })
+
+// Zen Mode
+export const getZenStories = (token, { playlistId, limit, sort } = {}) => {
+  const params = new URLSearchParams()
+  if (playlistId) params.set('playlist_id', playlistId)
+  if (limit) params.set('limit', limit)
+  if (sort) params.set('sort', sort)
+  const qs = params.toString()
+  return request(`/api/zen/stories${qs ? `?${qs}` : ''}`, token)
+}
+export const logZenListen = (storyId, token) => request('/api/zen/listen', token, {
+  method: 'POST',
+  body: JSON.stringify({ story_id: storyId })
+})
