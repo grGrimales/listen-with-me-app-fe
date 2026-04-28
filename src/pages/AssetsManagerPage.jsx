@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getStory, updateStory, uploadParagraphAudio, deleteParagraphAudio, uploadParagraphImage, deleteParagraphImage } from '../api/stories'
+import { getTTSVoices, getTTSModels, generateParagraphAudio, getParagraphAudioHistory, restoreParagraphAudio } from '../api/tts'
 
 export default function AssetsManagerPage() {
   const { id } = useParams()
@@ -10,8 +11,15 @@ export default function AssetsManagerPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [ttsVoices, setTtsVoices] = useState([])
+  const [ttsModels, setTtsModels] = useState([])
 
   useEffect(() => { loadStory() }, [id])
+
+  useEffect(() => {
+    getTTSVoices(token).then(setTtsVoices).catch(() => {})
+    getTTSModels(token).then(setTtsModels).catch(() => {})
+  }, [token])
 
   async function loadStory() {
     try {
@@ -143,8 +151,11 @@ export default function AssetsManagerPage() {
                 paragraph={p}
                 index={i}
                 token={token}
+                ttsVoices={ttsVoices}
+                ttsModels={ttsModels}
                 onAudioUploaded={() => { loadStory(); notify('Audio uploaded!') }}
                 onAudioDeleted={() => handleDeleteAudio(p.id)}
+                onAudioGenerated={() => { loadStory(); notify('Audio generated!') }}
                 onImageUploaded={() => { loadStory(); notify('Image uploaded!') }}
                 onImageDeleted={(imgId) => handleDeleteImage(imgId)}
                 onError={setError}
@@ -157,7 +168,9 @@ export default function AssetsManagerPage() {
   )
 }
 
-function ParagraphAssetCard({ paragraph: p, index, token, onAudioUploaded, onAudioDeleted, onImageUploaded, onImageDeleted, onError }) {
+function ParagraphAssetCard({ paragraph: p, index, token, ttsVoices, ttsModels, onAudioUploaded, onAudioDeleted, onAudioGenerated, onImageUploaded, onImageDeleted, onError }) {
+  const [showTTSModal, setShowTTSModal] = useState(false)
+
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden">
       {/* Header */}
@@ -174,7 +187,7 @@ function ParagraphAssetCard({ paragraph: p, index, token, onAudioUploaded, onAud
           <div className="flex justify-between items-center mb-4">
             <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide">Images ({p.images?.length || 0}/5)</p>
           </div>
-          
+
           <div className="grid grid-cols-3 gap-3 mb-4">
             {p.images?.map((img) => (
               <div key={img.id} className="relative aspect-square bg-stone-100 rounded-xl overflow-hidden group">
@@ -214,7 +227,7 @@ function ParagraphAssetCard({ paragraph: p, index, token, onAudioUploaded, onAud
               <audio src={p.audio_url} controls className="w-full h-10" />
               <div className="flex items-center gap-2 bg-stone-50 p-2 rounded-xl border border-stone-100">
                 <p className="text-[10px] text-stone-400 truncate flex-1 font-mono">{p.audio_url}</p>
-                <button 
+                <button
                   onClick={onAudioDeleted}
                   className="text-red-500 hover:text-red-700 p-1.5 rounded-lg hover:bg-red-100 transition"
                   title="Delete audio"
@@ -225,12 +238,38 @@ function ParagraphAssetCard({ paragraph: p, index, token, onAudioUploaded, onAud
                 </button>
               </div>
               <AudioUploadButton paragraphId={p.id} token={token} onSuccess={onAudioUploaded} onError={onError} label="Replace audio" />
+              <button
+                onClick={() => setShowTTSModal(true)}
+                className="w-full border border-violet-300 text-violet-700 bg-violet-50 hover:bg-violet-100 px-3 py-2 rounded-xl text-xs font-bold transition"
+              >
+                Regenerate with AI
+              </button>
             </div>
           ) : (
-            <AudioUploadButton paragraphId={p.id} token={token} onSuccess={onAudioUploaded} onError={onError} label="Upload audio" />
+            <div className="space-y-2">
+              <AudioUploadButton paragraphId={p.id} token={token} onSuccess={onAudioUploaded} onError={onError} label="Upload audio" />
+              <button
+                onClick={() => setShowTTSModal(true)}
+                className="w-full border border-violet-300 text-violet-700 bg-violet-50 hover:bg-violet-100 px-3 py-2 rounded-xl text-xs font-bold transition"
+              >
+                Generate with AI
+              </button>
+            </div>
           )}
         </div>
       </div>
+
+      {showTTSModal && (
+        <TTSGenerateModal
+          paragraphId={p.id}
+          token={token}
+          voices={ttsVoices}
+          models={ttsModels}
+          onSuccess={() => { setShowTTSModal(false); onAudioGenerated() }}
+          onError={(msg) => { setShowTTSModal(false); onError(msg) }}
+          onClose={() => setShowTTSModal(false)}
+        />
+      )}
     </div>
   )
 }
@@ -340,6 +379,179 @@ function ImageUploadButton({ paragraphId, token, onSuccess, onError }) {
       >
         {uploading ? 'Uploading Image...' : 'Confirm Upload'}
       </button>
+    </div>
+  )
+}
+
+function TTSGenerateModal({ paragraphId, token, voices, models, onSuccess, onError, onClose }) {
+  const [voiceId, setVoiceId] = useState(voices[0]?.id || '')
+  const [modelId, setModelId] = useState(models[0]?.id || '')
+  const [generating, setGenerating] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+  const [history, setHistory] = useState([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [restoring, setRestoring] = useState(null)
+
+  async function handleGenerate() {
+    if (!voiceId || !modelId) return
+    setGenerating(true)
+    try {
+      await generateParagraphAudio(paragraphId, voiceId, modelId, token)
+      onSuccess()
+    } catch (err) {
+      onError(err.message)
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  async function loadHistory() {
+    setHistoryLoading(true)
+    try {
+      const data = await getParagraphAudioHistory(paragraphId, token)
+      setHistory(data)
+    } catch {
+      setHistory([])
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  function toggleHistory() {
+    const next = !showHistory
+    setShowHistory(next)
+    if (next && history.length === 0) loadHistory()
+  }
+
+  async function handleRestore(historyId) {
+    setRestoring(historyId)
+    try {
+      await restoreParagraphAudio(paragraphId, historyId, token)
+      onSuccess()
+    } catch (err) {
+      onError(err.message)
+    } finally {
+      setRestoring(null)
+    }
+  }
+
+  function formatDate(iso) {
+    return new Date(iso).toLocaleString(undefined, {
+      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-lg font-bold text-stone-800">Generate Audio with AI</h3>
+            <button onClick={onClose} className="text-stone-400 hover:text-stone-600 transition">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">Voice</label>
+              {voices.length === 0 ? (
+                <p className="text-sm text-stone-400 italic">No voices available</p>
+              ) : (
+                <select
+                  value={voiceId}
+                  onChange={e => setVoiceId(e.target.value)}
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+                >
+                  {voices.map(v => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">Model</label>
+              {models.length === 0 ? (
+                <p className="text-sm text-stone-400 italic">No models available</p>
+              ) : (
+                <select
+                  value={modelId}
+                  onChange={e => setModelId(e.target.value)}
+                  className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
+                >
+                  {models.map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={onClose}
+                className="flex-1 border border-stone-300 text-stone-600 px-4 py-2 rounded-xl text-sm font-medium hover:bg-stone-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleGenerate}
+                disabled={generating || !voiceId || !modelId}
+                className="flex-1 bg-violet-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-violet-500 transition disabled:opacity-50 disabled:grayscale"
+              >
+                {generating ? 'Generating…' : 'Generate'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* History section */}
+        <div className="border-t border-stone-100">
+          <button
+            onClick={toggleHistory}
+            className="w-full flex items-center justify-between px-6 py-3 text-sm font-medium text-stone-500 hover:bg-stone-50 transition"
+          >
+            <span>Audio history</span>
+            <svg
+              className={`w-4 h-4 transition-transform ${showHistory ? 'rotate-180' : ''}`}
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {showHistory && (
+            <div className="px-6 pb-6 space-y-3">
+              {historyLoading && (
+                <p className="text-sm text-stone-400 text-center py-2">Loading…</p>
+              )}
+              {!historyLoading && history.length === 0 && (
+                <p className="text-sm text-stone-400 text-center py-2">No history yet</p>
+              )}
+              {!historyLoading && history.map(entry => (
+                <div key={entry.id} className="bg-stone-50 rounded-xl p-3 space-y-2 border border-stone-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold text-stone-700">{entry.voice_name || '—'} · {entry.model_id}</p>
+                      <p className="text-[10px] text-stone-400">{formatDate(entry.created_at)}</p>
+                    </div>
+                    <button
+                      onClick={() => handleRestore(entry.id)}
+                      disabled={restoring === entry.id}
+                      className="text-xs font-bold text-violet-600 hover:text-violet-800 bg-violet-50 hover:bg-violet-100 px-3 py-1 rounded-lg transition disabled:opacity-50"
+                    >
+                      {restoring === entry.id ? '…' : 'Restore'}
+                    </button>
+                  </div>
+                  <audio src={entry.audio_url} controls className="w-full h-8" />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
