@@ -444,25 +444,54 @@ export default function StoryDetailPage() {
     <div className={`min-h-screen ${c.page} pb-36 transition-colors duration-300 relative`}>
       {isVoiceMode ? <audio ref={audioRef} src={currentVoice.audio_url} /> : <audio ref={audioRef} />}
 
-      {/* Floating Save Selection Popup */}
+      {/* Desktop floating popup — hidden on mobile */}
       {selectionBox && (
         <div
-          className="fixed z-[60] -translate-x-1/2 animate-in fade-in zoom-in duration-150 flex flex-col items-center"
+          className="hidden sm:flex fixed z-[60] -translate-x-1/2 animate-in fade-in zoom-in duration-150 flex-col items-center"
           style={{ top: selectionBox.top, left: selectionBox.left }}
         >
           {selectionBox.showBelow && (
-            <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[6px] border-b-stone-900 mb-0" />
+            <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[6px] border-b-stone-900" />
           )}
           <button
             onPointerDown={(e) => e.preventDefault()}
             onClick={(e) => { e.stopPropagation(); handleAddVocab() }}
-            className="bg-stone-900 text-white text-xs font-bold px-4 py-2.5 rounded-full shadow-2xl flex items-center gap-2 hover:bg-emerald-600 active:bg-emerald-600 transition-colors touch-manipulation select-none"
+            className="bg-stone-900 text-white text-xs font-bold px-4 py-2.5 rounded-full shadow-2xl flex items-center gap-2 hover:bg-emerald-600 transition-colors select-none"
           >
             <span>+ Guardar en vocabulario</span>
           </button>
           {!selectionBox.showBelow && (
             <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-stone-900" />
           )}
+        </div>
+      )}
+
+      {/* Mobile bottom bar — shown only on mobile when text is selected */}
+      {selectedText && (
+        <div className="sm:hidden fixed bottom-0 left-0 right-0 z-[60] p-3 animate-in slide-in-from-bottom duration-200">
+          <div className="bg-stone-900 rounded-2xl px-4 py-3 flex items-center justify-between shadow-2xl gap-3">
+            <p className="text-white text-sm font-bold truncate flex-1 min-w-0">
+              "{selectedText}"
+            </p>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onPointerDown={(e) => e.preventDefault()}
+                onClick={() => { setSelectedText(''); setSelectionBox(null); window.getSelection()?.removeAllRanges() }}
+                className="w-8 h-8 rounded-xl bg-stone-800 flex items-center justify-center text-stone-400 active:bg-stone-700 touch-manipulation"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              <button
+                onPointerDown={(e) => e.preventDefault()}
+                onClick={(e) => { e.stopPropagation(); handleAddVocab() }}
+                className="bg-emerald-600 active:bg-emerald-500 text-white text-sm font-bold px-4 py-2 rounded-xl transition-colors touch-manipulation select-none"
+              >
+                + Guardar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
