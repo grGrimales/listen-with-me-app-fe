@@ -23,6 +23,9 @@ async function request(path, token, options = {}) {
 
     if (!res.ok) {
       console.error('[API Error Data]', data)
+      if (res.status === 401) {
+        window.dispatchEvent(new CustomEvent('api:unauthorized'))
+      }
       throw new Error(data.error || 'Something went wrong')
     }
     return data

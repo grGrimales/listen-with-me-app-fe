@@ -152,6 +152,7 @@ export default function StoryDetailPage() {
 
   const audioRef = useRef(null)
   const settingsRef = useRef(null)
+  const selectionTimerRef = useRef(null)
 
   useEffect(() => {
     async function load() {
@@ -172,29 +173,44 @@ export default function StoryDetailPage() {
     load()
   }, [id, token])
 
-  // Handle text selection
+  // Handle text selection — works on both desktop (mouseup) and mobile (selectionchange)
   useEffect(() => {
-    function handleSelection() {
-      const selection = window.getSelection()
-      const text = selection.toString().trim()
-      
-      if (text && text.length > 0) {
-        const range = selection.getRangeAt(0)
-        const rect = range.getBoundingClientRect()
-        
-        setSelectedText(text)
-        setSelectionBox({
-          top: rect.top - 45, // Use fixed coordinates relative to viewport
-          left: rect.left + rect.width / 2,
-        })
-      } else {
-        setSelectedText('')
-        setSelectionBox(null)
-      }
+    function handleSelectionUpdate() {
+      clearTimeout(selectionTimerRef.current)
+      selectionTimerRef.current = setTimeout(() => {
+        const selection = window.getSelection()
+        const text = selection?.toString().trim()
+
+        if (text && text.length > 0) {
+          try {
+            const range = selection.getRangeAt(0)
+            const rect = range.getBoundingClientRect()
+            // Show below if selection is near top of viewport (avoids native mobile toolbar)
+            const showBelow = rect.top < 80
+            setSelectedText(text)
+            setSelectionBox({
+              top: showBelow ? rect.bottom + 10 : Math.max(10, rect.top - 52),
+              left: Math.max(60, Math.min(rect.left + rect.width / 2, window.innerWidth - 60)),
+              showBelow,
+            })
+          } catch {
+            setSelectedText('')
+            setSelectionBox(null)
+          }
+        } else {
+          setSelectedText('')
+          setSelectionBox(null)
+        }
+      }, 150)
     }
 
-    document.addEventListener('mouseup', handleSelection)
-    return () => document.removeEventListener('mouseup', handleSelection)
+    document.addEventListener('mouseup', handleSelectionUpdate)
+    document.addEventListener('selectionchange', handleSelectionUpdate)
+    return () => {
+      clearTimeout(selectionTimerRef.current)
+      document.removeEventListener('mouseup', handleSelectionUpdate)
+      document.removeEventListener('selectionchange', handleSelectionUpdate)
+    }
   }, [])
 
   async function handleAddVocab() {
@@ -430,17 +446,23 @@ export default function StoryDetailPage() {
 
       {/* Floating Save Selection Popup */}
       {selectionBox && (
-        <div 
-          className="fixed z-[60] -translate-x-1/2 animate-in fade-in zoom-in duration-150"
+        <div
+          className="fixed z-[60] -translate-x-1/2 animate-in fade-in zoom-in duration-150 flex flex-col items-center"
           style={{ top: selectionBox.top, left: selectionBox.left }}
         >
+          {selectionBox.showBelow && (
+            <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[6px] border-b-stone-900 mb-0" />
+          )}
           <button
+            onPointerDown={(e) => e.preventDefault()}
             onClick={(e) => { e.stopPropagation(); handleAddVocab() }}
-            className="bg-stone-900 text-white text-xs font-bold px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 hover:bg-emerald-600 transition-colors"
+            className="bg-stone-900 text-white text-xs font-bold px-4 py-2.5 rounded-full shadow-2xl flex items-center gap-2 hover:bg-emerald-600 active:bg-emerald-600 transition-colors touch-manipulation select-none"
           >
-            <span>+ Save to Vocabulary</span>
+            <span>+ Guardar en vocabulario</span>
           </button>
-          <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-stone-900 mx-auto" />
+          {!selectionBox.showBelow && (
+            <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-stone-900" />
+          )}
         </div>
       )}
 

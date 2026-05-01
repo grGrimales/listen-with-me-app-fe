@@ -127,6 +127,8 @@ export default function HomePage() {
   const [error, setError] = useState('')
   const [deletingId, setDeletingId] = useState(null)
   const [sortBy, setSortBy] = useState('least_reviewed')
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const mobileMenuRef = useRef(null)
 
   // Playlist selection state
   const [showPlaylistModal, setShowPlaylistModal] = useState(false)
@@ -136,6 +138,17 @@ export default function HomePage() {
   const [isAddingToPlaylist, setIsAddingToPlaylist] = useState(false)
 
   const isAdmin = user?.roles?.includes('admin')
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return
+    function onOutside(e) {
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target)) {
+        setMobileMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onOutside)
+    return () => document.removeEventListener('mousedown', onOutside)
+  }, [mobileMenuOpen])
 
   useEffect(() => {
     loadStories()
@@ -357,58 +370,94 @@ export default function HomePage() {
         </div>
       )}
 
-      <header className="bg-white border-b border-stone-200 px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-20">
+      <header className="bg-white border-b border-stone-200 px-4 sm:px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-20">
         <div className="flex items-center gap-2">
           <span className="text-2xl">🎧</span>
           <span className="text-emerald-700 text-lg font-bold tracking-tight">Listen With Me</span>
         </div>
-        <div className="flex items-center gap-5">
+
+        {/* Desktop nav */}
+        <div className="hidden sm:flex items-center gap-5">
           {isAdmin && (
             <>
-              <Link
-                to="/admin/stories/trash"
-                className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition"
-              >
+              <Link to="/admin/stories/trash" className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition">
                 🗑️ Trash
               </Link>
-              <Link
-                to="/admin/stories/create"
-                className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2 rounded-xl transition shadow-sm"
-              >
+              <Link to="/admin/stories/create" className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2 rounded-xl transition shadow-sm">
                 + Create Story
               </Link>
             </>
           )}
-          <Link
-            to="/stats"
-            className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition flex items-center gap-1.5"
-          >
-            📊 Stats
-          </Link>
-          <Link
-            to="/playlists"
-            className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition flex items-center gap-1.5"
-          >
+          <Link to="/stats" className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition">📊 Stats</Link>
+          <Link to="/playlists" className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition flex items-center gap-1.5">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h10M4 18h10" />
             </svg>
             Playlists
           </Link>
-          <Link
-            to="/zen"
-            className="bg-stone-900 hover:bg-stone-700 text-emerald-400 text-sm font-bold px-4 py-2 rounded-xl transition shadow-sm flex items-center gap-1.5"
-          >
+          <Link to="/zen" className="bg-stone-900 hover:bg-stone-700 text-emerald-400 text-sm font-bold px-4 py-2 rounded-xl transition shadow-sm flex items-center gap-1.5">
             🧘 Modo Zen
           </Link>
-          <span className="text-sm text-stone-500 hidden sm:block">
+          <span className="text-sm text-stone-500">
             Hi, <span className="text-stone-700 font-medium">{user?.fullName}</span>
           </span>
-          <button
-            onClick={handleLogout}
-            className="text-sm text-stone-500 hover:text-stone-800 transition"
-          >
+          <button onClick={handleLogout} className="text-sm text-stone-500 hover:text-stone-800 transition">
             Sign out
           </button>
+        </div>
+
+        {/* Mobile hamburger */}
+        <div className="sm:hidden relative" ref={mobileMenuRef}>
+          <button
+            onClick={() => setMobileMenuOpen(v => !v)}
+            className="w-10 h-10 flex flex-col items-center justify-center gap-1.5 rounded-xl hover:bg-stone-100 transition"
+            aria-label="Menu"
+          >
+            <span className={`block h-0.5 bg-stone-700 transition-all duration-200 ${mobileMenuOpen ? 'w-5 rotate-45 translate-y-2' : 'w-5'}`} />
+            <span className={`block h-0.5 bg-stone-700 transition-all duration-200 ${mobileMenuOpen ? 'opacity-0 w-5' : 'w-5'}`} />
+            <span className={`block h-0.5 bg-stone-700 transition-all duration-200 ${mobileMenuOpen ? 'w-5 -rotate-45 -translate-y-2' : 'w-5'}`} />
+          </button>
+
+          {mobileMenuOpen && (
+            <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-stone-200 rounded-2xl shadow-xl z-30 overflow-hidden py-1">
+              <div className="px-4 py-2.5 border-b border-stone-100">
+                <p className="text-xs text-stone-400">Hola, <span className="text-stone-700 font-semibold">{user?.fullName}</span></p>
+              </div>
+              {isAdmin && (
+                <>
+                  <Link to="/admin/stories/trash" onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center gap-3 px-4 py-3 text-sm font-semibold text-stone-600 hover:bg-stone-50 transition">
+                    🗑️ Trash
+                  </Link>
+                  <Link to="/admin/stories/create" onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center gap-3 px-4 py-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 transition">
+                    + Create Story
+                  </Link>
+                  <div className="border-t border-stone-100 mx-3" />
+                </>
+              )}
+              <Link to="/stats" onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-3 px-4 py-3 text-sm font-semibold text-stone-600 hover:bg-stone-50 transition">
+                📊 Stats
+              </Link>
+              <Link to="/playlists" onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-3 px-4 py-3 text-sm font-semibold text-stone-600 hover:bg-stone-50 transition">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h10M4 18h10" />
+                </svg>
+                Playlists
+              </Link>
+              <Link to="/zen" onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-3 px-4 py-3 text-sm font-semibold text-stone-800 hover:bg-stone-800 hover:text-emerald-400 transition">
+                🧘 Modo Zen
+              </Link>
+              <div className="border-t border-stone-100 mx-3" />
+              <button onClick={() => { setMobileMenuOpen(false); handleLogout() }}
+                className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-stone-500 hover:bg-red-50 hover:text-red-600 transition">
+                Sign out
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
