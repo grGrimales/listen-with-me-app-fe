@@ -377,13 +377,14 @@ export default function HomePage() {
         </div>
 
         {/* Desktop nav */}
-        <div className="hidden sm:flex items-center gap-5">
+        <div className="hidden sm:flex items-center gap-4">
+          {/* Nav links */}
           {isAdmin && (
             <>
               <Link to="/admin/stories/trash" className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition">
                 🗑️ Trash
               </Link>
-              <Link to="/admin/stories/create" className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2 rounded-xl transition shadow-sm">
+              <Link to="/admin/stories/create" className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition">
                 + Create Story
               </Link>
             </>
@@ -395,15 +396,26 @@ export default function HomePage() {
             </svg>
             Playlists
           </Link>
-          <Link to="/zen" className="bg-stone-900 hover:bg-stone-700 text-emerald-400 text-sm font-bold px-4 py-2 rounded-xl transition shadow-sm flex items-center gap-1.5">
+          <Link to="/zen" className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition">
             🧘 Modo Zen
           </Link>
-          <span className="text-sm text-stone-500">
-            Hi, <span className="text-stone-700 font-medium">{user?.fullName}</span>
-          </span>
-          <button onClick={handleLogout} className="text-sm text-stone-500 hover:text-stone-800 transition">
-            Sign out
-          </button>
+
+          {/* Divider */}
+          <div className="w-px h-5 bg-stone-200 mx-1" />
+
+          {/* User pill */}
+          <div className="flex items-center gap-2 bg-stone-100 hover:bg-stone-200 transition rounded-xl pl-3 pr-1 py-1">
+            <span className="text-sm text-stone-600 font-medium leading-none">{user?.fullName?.split(' ')[0]}</span>
+            <button
+              onClick={handleLogout}
+              title="Sign out"
+              className="w-6 h-6 rounded-lg bg-white hover:bg-red-50 hover:text-red-500 text-stone-400 flex items-center justify-center transition shadow-sm"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Mobile hamburger */}
@@ -499,8 +511,8 @@ export default function HomePage() {
                 onClick={() => navigate(Number(playlistId) === p.id ? '/' : `/?playlist_id=${p.id}`)}
                 className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-all ${
                   Number(playlistId) === p.id
-                    ? 'bg-amber-400 text-white border-amber-400 shadow-sm'
-                    : 'bg-white text-amber-600 border-amber-200 hover:border-amber-400 hover:bg-amber-50'
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                    : 'bg-white text-stone-500 border-stone-200 hover:border-emerald-400 hover:text-emerald-700 hover:bg-emerald-50'
                 }`}
               >
                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
