@@ -35,9 +35,13 @@ async function request(path, token, options = {}) {
   }
 }
 
-export const getStories = (token, playlistId) => {
-  const url = playlistId ? `/api/stories?playlist_id=${playlistId}` : '/api/stories'
-  return request(url, token)
+export const getStories = (token, { playlistId, sortBy, limit = 12, offset = 0 } = {}) => {
+  const params = new URLSearchParams()
+  if (playlistId) params.set('playlist_id', playlistId)
+  if (sortBy)     params.set('sort_by', sortBy)
+  params.set('limit', limit)
+  params.set('offset', offset)
+  return request(`/api/stories?${params}`, token)
 }
 export const getDeletedStories = (token) => request('/api/admin/stories/trash-items', token)
 export const getStory = (id, token) => request(`/api/stories/${id}`, token)

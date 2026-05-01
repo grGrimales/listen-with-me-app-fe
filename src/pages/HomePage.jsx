@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getStories, deleteStory, getPlaylists, addStoryToPlaylist, removeStoryFromPlaylist } from '../api/stories'
@@ -121,14 +121,20 @@ export default function HomePage() {
   const [searchParams] = useSearchParams()
   const playlistId = searchParams.get('playlist_id')
 
+  const PAGE_SIZE = 12
+
   const [stories, setStories] = useState([])
   const [playlists, setPlaylists] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
+  const [offset, setOffset] = useState(0)
   const [error, setError] = useState('')
   const [deletingId, setDeletingId] = useState(null)
   const [sortBy, setSortBy] = useState('least_reviewed')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const mobileMenuRef = useRef(null)
+  const sentinelRef = useRef(null)
 
   // Playlist selection state
   const [showPlaylistModal, setShowPlaylistModal] = useState(false)
@@ -150,20 +156,52 @@ export default function HomePage() {
     return () => document.removeEventListener('mousedown', onOutside)
   }, [mobileMenuOpen])
 
+  // Reset and reload when filters change
   useEffect(() => {
-    loadStories()
+    setStories([])
+    setOffset(0)
+    setHasMore(false)
+    loadStories(0)
     loadPlaylists()
-  }, [token, playlistId])
+  }, [token, playlistId, sortBy])
 
-  async function loadStories() {
+  // IntersectionObserver — load next page when sentinel is visible
+  useEffect(() => {
+    if (!sentinelRef.current) return
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting && hasMore && !loadingMore) loadMore() },
+      { rootMargin: '200px' }
+    )
+    observer.observe(sentinelRef.current)
+    return () => observer.disconnect()
+  }, [hasMore, loadingMore, offset])
+
+  async function loadStories(fromOffset) {
     setLoading(true)
     try {
-      const data = await getStories(token, playlistId) // Pass playlistId
-      setStories(data)
+      const data = await getStories(token, { playlistId, sortBy, limit: PAGE_SIZE, offset: fromOffset })
+      setStories(data.stories)
+      setHasMore(data.has_more)
+      setOffset(fromOffset + data.stories.length)
     } catch (err) {
       setError(err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function loadMore() {
+    if (loadingMore || !hasMore) return
+    setLoadingMore(true)
+    try {
+      const data = await getStories(token, { playlistId, sortBy, limit: PAGE_SIZE, offset })
+      setStories(prev => [...prev, ...data.stories])
+      setHasMore(data.has_more)
+      setOffset(prev => prev + data.stories.length)
+    } catch (err) {
+      console.error('Error loading more:', err)
+    } finally {
+      setLoadingMore(false)
     }
   }
 
@@ -181,8 +219,6 @@ export default function HomePage() {
     try {
       await deleteStory(deletingId, token)
       setDeletingId(null)
-      await loadStories()
-      // Optional: navigate to trash to see it there
       navigate('/admin/stories/trash')
     } catch (err) {
       alert(err.message)
@@ -203,7 +239,7 @@ export default function HomePage() {
       setStoryToAddToPlaylist(null)
       setShowSuccess(true)
       setTimeout(() => setShowSuccess(false), 2000)
-      loadPlaylists() // Update counts
+      loadPlaylists()
     } catch (err) {
       alert(err.message)
     } finally {
@@ -216,35 +252,14 @@ export default function HomePage() {
     try {
       await removeStoryFromPlaylist(playlistId, storyToRemove.id, token)
       setStoryToRemove(null)
-      loadStories()
+      setStories([])
+      setOffset(0)
+      loadStories(0)
       loadPlaylists()
     } catch (err) {
       alert(err.message)
     }
   }
-
-  const sortedStories = useMemo(() => {
-    const arr = [...stories]
-    switch (sortBy) {
-      case 'least_reviewed':
-        // Sin revisión primero, luego por menor cantidad
-        return arr.sort((a, b) => a.review_count - b.review_count)
-      case 'last_reviewed':
-        // La más recientemente revisada primero; las nunca revisadas al final
-        return arr.sort((a, b) => {
-          if (!a.last_reviewed_at && !b.last_reviewed_at) return 0
-          if (!a.last_reviewed_at) return 1
-          if (!b.last_reviewed_at) return -1
-          return new Date(b.last_reviewed_at) - new Date(a.last_reviewed_at)
-        })
-      case 'most_reviewed':
-        return arr.sort((a, b) => b.review_count - a.review_count)
-      case 'newest':
-        return arr.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      default:
-        return arr
-    }
-  }, [stories, sortBy])
 
   return (
     <div className="min-h-screen bg-stone-50 flex flex-col relative">
@@ -522,7 +537,7 @@ export default function HomePage() {
           </div>
           {!loading && (
             <p className="text-sm text-stone-400 mt-0.5">
-              {sortedStories.length} {sortedStories.length === 1 ? 'historia' : 'historias'}
+              {stories.length}{hasMore ? '+' : ''} {stories.length === 1 ? 'historia' : 'historias'}
               {playlistId && playlists.find(p => p.id === Number(playlistId))?.description && (
                 <span className="ml-2 italic">· {playlists.find(p => p.id === Number(playlistId)).description}</span>
               )}
@@ -539,7 +554,7 @@ export default function HomePage() {
           <div className="bg-red-50 border border-red-200 text-red-600 p-4 rounded-xl text-center">
             {error}
           </div>
-        ) : sortedStories.length === 0 ? (
+        ) : stories.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <span className="text-5xl mb-4">📚</span>
             <h3 className="text-xl font-bold text-stone-800">Sin historias</h3>
@@ -548,8 +563,9 @@ export default function HomePage() {
             </p>
           </div>
         ) : (
+          <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {sortedStories.map(story => (
+            {stories.map(story => (
               <div
                 key={story.id}
                 className="bg-white rounded-2xl border border-stone-200 overflow-hidden hover:shadow-xl transition-shadow group flex flex-col"
@@ -657,6 +673,14 @@ export default function HomePage() {
               </div>
             ))}
           </div>
+
+          {/* Infinite scroll sentinel */}
+          <div ref={sentinelRef} className="py-8 flex justify-center">
+            {loadingMore && (
+              <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-emerald-600" />
+            )}
+          </div>
+          </>
         )}
       </main>
     </div>
