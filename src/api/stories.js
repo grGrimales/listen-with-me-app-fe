@@ -41,7 +41,11 @@ export const getStories = (token, { playlistId, sortBy, limit = 12, offset = 0 }
   if (sortBy)     params.set('sort_by', sortBy)
   params.set('limit', limit)
   params.set('offset', offset)
-  return request(`/api/stories?${params}`, token)
+  return request(`/api/stories?${params}`, token).then(data => {
+    // Support both old backend (array) and new backend ({ stories, has_more })
+    if (Array.isArray(data)) return { stories: data, has_more: false }
+    return data
+  })
 }
 export const getDeletedStories = (token) => request('/api/admin/stories/trash-items', token)
 export const getStory = (id, token) => request(`/api/stories/${id}`, token)
