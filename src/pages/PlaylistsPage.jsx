@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { getPlaylists, createPlaylist, updatePlaylist, deletePlaylist } from '../api/stories'
+import { getPlaylists, createPlaylist, updatePlaylist, deletePlaylist, setPlaylistFavorite } from '../api/stories'
 
 export default function PlaylistsPage() {
   const { token } = useAuth()
@@ -81,6 +81,19 @@ export default function PlaylistsPage() {
       setPlaylistToDelete(null)
       load()
     } catch (err) {
+      alert(err.message)
+    }
+  }
+
+  async function handleToggleFavorite(p) {
+    const next = !p.is_favorite
+    // Optimistic update
+    setPlaylists(prev => prev.map(x => x.id === p.id ? { ...x, is_favorite: next } : x))
+    try {
+      await setPlaylistFavorite(p.id, next, token)
+    } catch (err) {
+      // Revert on error
+      setPlaylists(prev => prev.map(x => x.id === p.id ? { ...x, is_favorite: p.is_favorite } : x))
       alert(err.message)
     }
   }
@@ -201,19 +214,28 @@ export default function PlaylistsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {playlists.map(p => (
-              <div key={p.id} className="bg-white rounded-[2rem] border border-stone-200 p-6 shadow-sm hover:shadow-md transition-shadow flex flex-col group">
+              <div key={p.id} className={`bg-white rounded-[2rem] border p-6 shadow-sm hover:shadow-md transition-shadow flex flex-col group ${p.is_favorite ? 'border-amber-200 bg-amber-50/30' : 'border-stone-200'}`}>
                 <div className="flex-1 mb-6">
                   <div className="flex items-start justify-between mb-2">
-                    <span className="text-3xl">📁</span>
+                    <button
+                      onClick={() => handleToggleFavorite(p)}
+                      title={p.is_favorite ? 'Quitar de favoritos' : 'Marcar como favorito'}
+                      className="transition-transform active:scale-110"
+                    >
+                      {p.is_favorite
+                        ? <svg className="w-7 h-7 text-amber-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                        : <svg className="w-7 h-7 text-stone-300 hover:text-amber-300" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                      }
+                    </button>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button 
+                      <button
                         onClick={() => openEdit(p)}
                         className="text-stone-300 hover:text-emerald-600 transition p-1"
                         title="Edit name"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                       </button>
-                      <button 
+                      <button
                         onClick={() => setPlaylistToDelete(p)}
                         className="text-stone-300 hover:text-red-500 transition p-1"
                         title="Delete playlist"

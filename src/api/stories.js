@@ -111,6 +111,10 @@ export const updatePlaylist = (id, data, token) => request(`/api/playlists/${id}
   body: JSON.stringify(data)
 })
 export const deletePlaylist = (id, token) => request(`/api/playlists/${id}`, token, { method: 'DELETE' })
+export const setPlaylistFavorite = (id, isFavorite, token) => request(`/api/playlists/${id}`, token, {
+  method: 'PATCH',
+  body: JSON.stringify({ is_favorite: isFavorite }),
+})
 export const addStoryToPlaylist = (playlistId, storyId, token) => request(`/api/playlists/${playlistId}/stories`, token, {
   method: 'POST',
   body: JSON.stringify({ story_id: storyId })

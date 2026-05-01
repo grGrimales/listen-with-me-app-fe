@@ -487,11 +487,27 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Title + count */}
+        {/* Title + count + favorite playlist shortcuts */}
         <div className="mb-6">
-          <h2 className="text-2xl font-bold text-stone-800 tracking-tight">
-            {playlistId ? playlists.find(p => p.id === Number(playlistId))?.name || 'Playlist' : 'Biblioteca'}
-          </h2>
+          <div className="flex flex-wrap items-center gap-2 mb-1">
+            <h2 className="text-2xl font-bold text-stone-800 tracking-tight">
+              {playlistId ? playlists.find(p => p.id === Number(playlistId))?.name || 'Playlist' : 'Biblioteca'}
+            </h2>
+            {playlists.filter(p => p.is_favorite).map(p => (
+              <button
+                key={p.id}
+                onClick={() => navigate(Number(playlistId) === p.id ? '/' : `/?playlist_id=${p.id}`)}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-all ${
+                  Number(playlistId) === p.id
+                    ? 'bg-amber-400 text-white border-amber-400 shadow-sm'
+                    : 'bg-white text-amber-600 border-amber-200 hover:border-amber-400 hover:bg-amber-50'
+                }`}
+              >
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                {p.name}
+              </button>
+            ))}
+          </div>
           {!loading && (
             <p className="text-sm text-stone-400 mt-0.5">
               {sortedStories.length} {sortedStories.length === 1 ? 'historia' : 'historias'}

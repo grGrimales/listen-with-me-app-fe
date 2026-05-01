@@ -153,6 +153,7 @@ export default function StoryDetailPage() {
   const audioRef = useRef(null)
   const settingsRef = useRef(null)
   const selectionTimerRef = useRef(null)
+  const paraRefs = useRef({})
 
   useEffect(() => {
     async function load() {
@@ -368,6 +369,13 @@ export default function StoryDetailPage() {
     setParaCurrentTime(0)
     setActiveParagraphId(para.id)
   }
+  // Auto-scroll to active paragraph
+  useEffect(() => {
+    if (!activeParagraphId) return
+    const el = paraRefs.current[activeParagraphId]
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [activeParagraphId])
+
   function toggleParagraph(para) {
     if (!audioRef.current) return
     if (playingParaId === para.id) {
@@ -685,7 +693,7 @@ export default function StoryDetailPage() {
             )
 
             return (
-              <div key={`para-${p.id}`} className={`mb-14 transition-all duration-500 rounded-3xl p-4 -mx-4 ${isActive ? c.paraActive : ''}`}>
+              <div key={`para-${p.id}`} ref={el => { paraRefs.current[p.id] = el }} className={`mb-14 transition-all duration-500 rounded-3xl p-4 -mx-4 ${isActive ? c.paraActive : ''}`}>
                 <div className="flex items-start gap-3 mb-4">
                   <span className={`font-mono text-sm flex-shrink-0 mt-1 transition-colors ${isActive ? c.paraNumActive : c.paraNumIdle}`}>
                     {(idx + 1).toString().padStart(2, '0')}
