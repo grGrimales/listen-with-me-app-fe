@@ -153,6 +153,7 @@ export default function StoryDetailPage() {
   const audioRef = useRef(null)
   const settingsRef = useRef(null)
   const selectionTimerRef = useRef(null)
+  const paraDelayRef = useRef(null)
   const paraRefs = useRef({})
 
   useEffect(() => {
@@ -327,13 +328,12 @@ export default function StoryDetailPage() {
       if (!story) return
       const idx = story.paragraphs.findIndex(p => p.id === playingParaId)
       const next = story.paragraphs.slice(idx + 1).find(p => p.audio_url)
-      
+
       if (next) {
-        playParagraph(next)
+        paraDelayRef.current = setTimeout(() => playParagraph(next), 800)
       } else if (isLooping) {
-        // Start from first paragraph with audio
         const first = story.paragraphs.find(p => p.audio_url)
-        if (first) playParagraph(first)
+        if (first) paraDelayRef.current = setTimeout(() => playParagraph(first), 800)
       }
     }
     audio.addEventListener('timeupdate', onTimeUpdate)
@@ -343,6 +343,7 @@ export default function StoryDetailPage() {
       audio.removeEventListener('timeupdate', onTimeUpdate)
       audio.removeEventListener('durationchange', onDurationChange)
       audio.removeEventListener('ended', onEnded)
+      clearTimeout(paraDelayRef.current)
     }
   }, [currentVoice, playingParaId, story, isLooping])
 

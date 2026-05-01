@@ -397,6 +397,7 @@ function PlayerScreen({ config, onEnd }) {
         // load & play next paragraph directly — don't go through useEffect
         audio.src = src
         audio.load()
+        await new Promise(resolve => setTimeout(resolve, 800))
         audio.play().catch(e => { if (e.name !== 'AbortError') console.error(e) })
       } else {
         // all paragraphs done → log + advance to next story
