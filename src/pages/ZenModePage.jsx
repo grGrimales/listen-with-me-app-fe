@@ -10,7 +10,7 @@ function ZenPlaylistCombobox({ playlists, selectedId, onChange }) {
   const inputRef = useRef(null)
 
   const selected = playlists.find(p => p.id === selectedId)
-  const displayValue = open ? search : (selected ? selected.name : 'Todas las historias')
+  const displayValue = open ? search : (selected ? selected.name : 'All stories')
   const filtered = playlists.filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
 
   useEffect(() => {
@@ -38,7 +38,7 @@ function ZenPlaylistCombobox({ playlists, selectedId, onChange }) {
           onChange={e => { setSearch(e.target.value); setOpen(true) }}
           onFocus={() => { setOpen(true); setSearch('') }}
           readOnly={!open}
-          placeholder="Todas las historias"
+          placeholder="All stories"
           className="flex-1 outline-none text-sm bg-transparent text-stone-200 placeholder-stone-600 cursor-pointer"
         />
         {selectedId && (
@@ -58,10 +58,10 @@ function ZenPlaylistCombobox({ playlists, selectedId, onChange }) {
               onClick={() => select(null)}
               className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors ${!selectedId ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-stone-400 hover:bg-stone-800'}`}
             >
-              <span>📚</span> Todas las historias
+              <span>📚</span> All stories
             </button>
             {filtered.length === 0 && search && (
-              <p className="px-4 py-3 text-sm text-stone-600 italic">Sin resultados para "{search}"</p>
+              <p className="px-4 py-3 text-sm text-stone-600 italic">No results for "{search}"</p>
             )}
             {filtered.map(p => (
               <button
@@ -85,10 +85,10 @@ function ZenPlaylistCombobox({ playlists, selectedId, onChange }) {
 }
 
 const SORT_OPTIONS = [
-  { value: 'random',      label: 'Aleatorio',           icon: '🎲' },
-  { value: 'newest',      label: 'Más recientes',        icon: '🆕' },
-  { value: 'oldest',      label: 'Más antiguas',         icon: '📅' },
-  { value: 'least_played', label: 'Menos escuchadas',   icon: '🌱' },
+  { value: 'random',      label: 'Random',       icon: '🎲' },
+  { value: 'newest',      label: 'Newest',        icon: '🆕' },
+  { value: 'oldest',      label: 'Oldest',        icon: '📅' },
+  { value: 'least_played', label: 'Least played', icon: '🌱' },
 ]
 
 const COUNT_OPTIONS = [3, 5, 10, 15, 20]
@@ -123,17 +123,17 @@ function SetupScreen({ onStart }) {
   return (
     <div className="min-h-screen bg-stone-950 text-stone-100 flex flex-col">
       <header className="px-6 py-5 flex items-center justify-between border-b border-stone-800">
-        <Link to="/" className="text-stone-500 hover:text-stone-300 transition text-sm font-medium">← Biblioteca</Link>
+        <Link to="/" className="text-stone-500 hover:text-stone-300 transition text-sm font-medium">← Library</Link>
         <div className="flex items-center gap-2">
           <span className="text-2xl">🧘</span>
-          <span className="font-bold text-lg text-stone-100">Modo Zen</span>
+          <span className="font-bold text-lg text-stone-100">Zen Mode</span>
         </div>
         <div className="w-24" />
       </header>
 
       <main className="flex-1 flex flex-col items-center justify-center px-6 py-12 max-w-lg mx-auto w-full gap-8">
         <div className="text-center">
-          <p className="text-stone-400 text-sm mt-2">Configura tu sesión de escucha y relájate.</p>
+          <p className="text-stone-400 text-sm mt-2">Set up your listening session and relax.</p>
         </div>
 
         {/* Playlist */}
@@ -167,7 +167,7 @@ function SetupScreen({ onStart }) {
 
         {/* Order */}
         <section className="w-full">
-          <label className="block text-xs font-bold uppercase tracking-widest text-stone-500 mb-3">Orden de reproducción</label>
+          <label className="block text-xs font-bold uppercase tracking-widest text-stone-500 mb-3">Playback order</label>
           <div className="grid grid-cols-2 gap-2">
             {SORT_OPTIONS.map(opt => (
               <button
@@ -188,7 +188,7 @@ function SetupScreen({ onStart }) {
         {/* Count + Infinite */}
         <section className="w-full">
           <div className="flex items-center justify-between mb-3">
-            <label className="text-xs font-bold uppercase tracking-widest text-stone-500">Cantidad de historias</label>
+            <label className="text-xs font-bold uppercase tracking-widest text-stone-500">Number of stories</label>
             <button
               onClick={() => setInfinite(v => !v)}
               className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold border transition-all ${
@@ -197,7 +197,7 @@ function SetupScreen({ onStart }) {
                   : 'bg-stone-900 border-stone-700 text-stone-400 hover:border-stone-500'
               }`}
             >
-              ∞ Infinito
+              ∞ Infinite
             </button>
           </div>
           {!infinite && (
@@ -219,7 +219,7 @@ function SetupScreen({ onStart }) {
           )}
           {infinite && (
             <p className="text-xs text-stone-600 bg-stone-900 rounded-2xl px-4 py-3 border border-stone-800">
-              La sesión repetirá las historias indefinidamente hasta que la detengas.
+              The session will repeat stories indefinitely until you stop it.
             </p>
           )}
         </section>
@@ -228,7 +228,7 @@ function SetupScreen({ onStart }) {
           onClick={handleStart}
           className="w-full bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold py-4 rounded-2xl transition-all shadow-2xl shadow-emerald-900/40 text-base"
         >
-          🧘 Comenzar sesión Zen
+          🧘 Start Zen session
         </button>
       </main>
     </div>
@@ -308,7 +308,7 @@ function PlayerScreen({ config, onEnd }) {
           limit: config.infinite ? 0 : config.count,
           sort: config.sort,
         })
-        if (!stories.length) { setError('No hay historias disponibles con esta configuración.'); return }
+        if (!stories.length) { setError('No stories available with this configuration.'); return }
         setQueue(stories)
       } catch (e) {
         setError(e.message)
@@ -470,7 +470,7 @@ function PlayerScreen({ config, onEnd }) {
     <div className="min-h-screen bg-stone-950 flex flex-col items-center justify-center gap-6 px-6 text-center">
       <span className="text-5xl">😔</span>
       <p className="text-stone-400">{error}</p>
-      <button onClick={() => onEnd(0)} className="bg-stone-800 text-stone-300 font-bold px-6 py-3 rounded-2xl">Volver</button>
+      <button onClick={() => onEnd(0)} className="bg-stone-800 text-stone-300 font-bold px-6 py-3 rounded-2xl">Back</button>
     </div>
   )
 
@@ -486,13 +486,13 @@ function PlayerScreen({ config, onEnd }) {
           onClick={() => { const s = queueRef.current[idxRef.current]; if (s) logListen(s.id); onEnd(countRef.current) }}
           className="text-stone-600 hover:text-stone-400 transition text-sm"
         >
-          ✕ Salir
+          ✕ Exit
         </button>
         <div className="flex flex-col items-center">
-          <span className="text-xs text-stone-600 font-medium">Modo Zen</span>
+          <span className="text-xs text-stone-600 font-medium">Zen Mode</span>
           <span className="text-xs text-stone-500">{position} / {totalInQueue}</span>
         </div>
-        <div className="text-sm text-stone-700 font-mono">{completedCount} escuchadas</div>
+        <div className="text-sm text-stone-700 font-mono">{completedCount} listened</div>
       </header>
 
       {/* Main content */}
@@ -510,7 +510,7 @@ function PlayerScreen({ config, onEnd }) {
         {/* Story info */}
         <div className="text-center w-full">
           <p className="text-xs text-emerald-500 font-bold uppercase tracking-widest mb-1">
-            Nivel {metaStory.level} · {metaStory.category?.name}
+            Level {metaStory.level} · {metaStory.category?.name}
           </p>
           <h2 className="text-2xl font-bold text-stone-100 leading-tight mb-1 line-clamp-2">{metaStory.title}</h2>
           <p className="text-sm text-stone-500 italic">{metaStory.author}</p>
@@ -523,7 +523,7 @@ function PlayerScreen({ config, onEnd }) {
 
         {/* No audio warning */}
         {hasNoPara && (
-          <p className="text-xs text-stone-600 text-center">Esta historia no tiene audio. Se saltará automáticamente.</p>
+          <p className="text-xs text-stone-600 text-center">This story has no audio. It will be skipped automatically.</p>
         )}
 
         {/* Auto-skip story with no audio */}
@@ -560,7 +560,7 @@ function PlayerScreen({ config, onEnd }) {
 
         {/* Controls */}
         <div className="flex items-center gap-6">
-          <button onClick={skipNext} className="w-12 h-12 flex items-center justify-center text-stone-500 hover:text-stone-300 transition-all" title="Saltar historia">
+          <button onClick={skipNext} className="w-12 h-12 flex items-center justify-center text-stone-500 hover:text-stone-300 transition-all" title="Skip story">
             <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
               <path d="M6 18l8.5-6L6 6v12zm2-8.14L11.03 12 8 14.14V9.86zM16 6h2v12h-2z"/>
             </svg>
@@ -584,14 +584,14 @@ function PlayerScreen({ config, onEnd }) {
         {/* Queue preview */}
         {queue.length > 1 && (
           <div className="w-full">
-            <p className="text-xs text-stone-700 uppercase tracking-widest font-bold mb-2 text-center">Siguiente</p>
+            <p className="text-xs text-stone-700 uppercase tracking-widest font-bold mb-2 text-center">Up next</p>
             <div className="flex flex-col gap-1.5">
               {queue.slice(currentIdx + 1, currentIdx + 3).map((s, i) => (
                 <div key={s.id} className="flex items-center gap-3 bg-stone-900/50 rounded-xl px-3 py-2 border border-stone-800/50">
                   <span className="text-xs text-stone-700 font-mono w-4">{i + 1}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-stone-400 font-medium truncate">{s.title}</p>
-                    <p className="text-xs text-stone-600">Nivel {s.level}</p>
+                    <p className="text-xs text-stone-600">Level {s.level}</p>
                   </div>
                 </div>
               ))}
@@ -611,9 +611,9 @@ function CompleteScreen({ completed, onRestart }) {
         🧘
       </div>
       <div>
-        <h2 className="text-3xl font-bold mb-2">¡Sesión completa!</h2>
+        <h2 className="text-3xl font-bold mb-2">Session complete!</h2>
         <p className="text-stone-400 text-lg">
-          Escuchaste <span className="text-emerald-400 font-bold">{completed}</span> {completed === 1 ? 'historia' : 'historias'} en modo Zen.
+          You listened to <span className="text-emerald-400 font-bold">{completed}</span> {completed === 1 ? 'story' : 'stories'} in Zen mode.
         </p>
       </div>
       <div className="flex flex-col gap-3 w-full max-w-xs">
@@ -621,13 +621,13 @@ function CompleteScreen({ completed, onRestart }) {
           onClick={onRestart}
           className="w-full bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold py-4 rounded-2xl transition-all"
         >
-          Nueva sesión
+          New session
         </button>
         <Link
           to="/"
           className="w-full bg-stone-900 hover:bg-stone-800 text-stone-300 font-bold py-4 rounded-2xl transition-all text-center block"
         >
-          Volver a la biblioteca
+          Back to library
         </Link>
       </div>
     </div>

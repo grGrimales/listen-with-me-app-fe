@@ -466,7 +466,7 @@ export default function StoryDetailPage() {
             onClick={(e) => { e.stopPropagation(); handleAddVocab() }}
             className="bg-stone-900 text-white text-xs font-bold px-4 py-2.5 rounded-full shadow-2xl flex items-center gap-2 hover:bg-emerald-600 transition-colors select-none"
           >
-            <span>+ Guardar en vocabulario</span>
+            <span>+ Save to vocabulary</span>
           </button>
           {!selectionBox.showBelow && (
             <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-stone-900" />
@@ -496,7 +496,7 @@ export default function StoryDetailPage() {
                 onClick={(e) => { e.stopPropagation(); handleAddVocab() }}
                 className="bg-emerald-600 active:bg-emerald-500 text-white text-sm font-bold px-4 py-2 rounded-xl transition-colors touch-manipulation select-none"
               >
-                + Guardar
+                + Save
               </button>
             </div>
           </div>
@@ -512,7 +512,7 @@ export default function StoryDetailPage() {
             </div>
             <h3 className="text-2xl font-bold text-stone-800 text-center mb-2">Mark as Reviewed?</h3>
             <p className="text-stone-500 text-center mb-8 font-medium">
-              ¿Estás seguro de que quieres marcar esta historia como revisada? Se registrará en tus estadísticas de progreso.
+              Are you sure you want to mark this story as reviewed? It will be recorded in your progress statistics.
             </p>
             <div className="flex flex-col gap-3">
               <button

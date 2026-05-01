@@ -4,10 +4,10 @@ import { useAuth } from '../context/AuthContext'
 import { getStories, deleteStory, getPlaylists, addStoryToPlaylist, removeStoryFromPlaylist } from '../api/stories'
 
 const SORT_OPTIONS = [
-  { value: 'least_reviewed', label: 'Menos revisadas' },
-  { value: 'last_reviewed',  label: 'Última revisión' },
-  { value: 'most_reviewed',  label: 'Más revisadas'  },
-  { value: 'newest',         label: 'Más recientes'  },
+  { value: 'least_reviewed', label: 'Least reviewed' },
+  { value: 'last_reviewed',  label: 'Last reviewed'  },
+  { value: 'most_reviewed',  label: 'Most reviewed'  },
+  { value: 'newest',         label: 'Newest'         },
 ]
 
 // Searchable playlist combobox
@@ -18,7 +18,7 @@ function PlaylistCombobox({ playlists, selectedId, onChange }) {
   const inputRef = useRef(null)
 
   const selected = playlists.find(p => p.id === Number(selectedId))
-  const displayValue = open ? search : (selected ? selected.name : 'Todas las historias')
+  const displayValue = open ? search : (selected ? selected.name : 'All stories')
   const filtered = playlists.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase())
   )
@@ -55,7 +55,7 @@ function PlaylistCombobox({ playlists, selectedId, onChange }) {
           value={displayValue}
           onChange={e => { setSearch(e.target.value); setOpen(true) }}
           onFocus={() => { setOpen(true); setSearch('') }}
-          placeholder="Filtrar playlist..."
+          placeholder="Filter playlists..."
           className="flex-1 outline-none text-sm text-stone-700 bg-transparent min-w-0 cursor-pointer"
           readOnly={!open}
         />
@@ -84,10 +84,10 @@ function PlaylistCombobox({ playlists, selectedId, onChange }) {
               <svg className="w-4 h-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0l-4-4m4 4l-4 4" />
               </svg>
-              Todas las historias
+              All stories
             </button>
             {filtered.length === 0 && search && (
-              <p className="px-4 py-3 text-sm text-stone-400 italic">Sin resultados para "{search}"</p>
+              <p className="px-4 py-3 text-sm text-stone-400 italic">No results for "{search}"</p>
             )}
             {filtered.map(p => (
               <button
@@ -105,8 +105,8 @@ function PlaylistCombobox({ playlists, selectedId, onChange }) {
           </div>
           {playlists.length === 0 && (
             <div className="px-4 py-4 text-center">
-              <p className="text-sm text-stone-400 mb-2">No tienes playlists</p>
-              <Link to="/playlists" className="text-xs text-emerald-600 font-bold">Crear playlist →</Link>
+              <p className="text-sm text-stone-400 mb-2">You have no playlists</p>
+              <Link to="/playlists" className="text-xs text-emerald-600 font-bold">Create playlist →</Link>
             </div>
           )}
         </div>
@@ -305,7 +305,7 @@ export default function HomePage() {
               onClick={() => setShowSuccess(false)}
               className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-2xl transition shadow-lg shadow-emerald-200 active:scale-95"
             >
-              Aceptar
+              Got it
             </button>
           </div>
         </div>
@@ -320,7 +320,7 @@ export default function HomePage() {
             </div>
             <h3 className="text-2xl font-bold text-stone-800 text-center mb-2">Remove from Playlist?</h3>
             <p className="text-stone-500 text-center mb-8 font-medium">
-              ¿Estás seguro de que quieres quitar <span className="text-stone-800 font-bold">"{storyToRemove.title}"</span> de esta playlist?
+              Are you sure you want to remove <span className="text-stone-800 font-bold">"{storyToRemove.title}"</span> from this playlist?
             </p>
             <div className="flex flex-col gap-3">
               <button
@@ -412,7 +412,7 @@ export default function HomePage() {
             Playlists
           </Link>
           <Link to="/zen" className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition">
-            🧘 Modo Zen
+            🧘 Zen Mode
           </Link>
 
           {/* Divider */}
@@ -448,7 +448,7 @@ export default function HomePage() {
           {mobileMenuOpen && (
             <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-stone-200 rounded-2xl shadow-xl z-30 overflow-hidden py-1">
               <div className="px-4 py-2.5 border-b border-stone-100">
-                <p className="text-xs text-stone-400">Hola, <span className="text-stone-700 font-semibold">{user?.fullName}</span></p>
+                <p className="text-xs text-stone-400">Hello, <span className="text-stone-700 font-semibold">{user?.fullName}</span></p>
               </div>
               {isAdmin && (
                 <>
@@ -476,7 +476,7 @@ export default function HomePage() {
               </Link>
               <Link to="/zen" onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center gap-3 px-4 py-3 text-sm font-semibold text-stone-800 hover:bg-stone-800 hover:text-emerald-400 transition">
-                🧘 Modo Zen
+                🧘 Zen Mode
               </Link>
               <div className="border-t border-stone-100 mx-3" />
               <button onClick={() => { setMobileMenuOpen(false); handleLogout() }}
@@ -518,7 +518,7 @@ export default function HomePage() {
         <div className="mb-6">
           <div className="flex flex-wrap items-center gap-2 mb-1">
             <h2 className="text-2xl font-bold text-stone-800 tracking-tight">
-              {playlistId ? playlists.find(p => p.id === Number(playlistId))?.name || 'Playlist' : 'Biblioteca'}
+              {playlistId ? playlists.find(p => p.id === Number(playlistId))?.name || 'Playlist' : 'Library'}
             </h2>
             {playlists.filter(p => p.is_favorite).map(p => (
               <button
@@ -537,7 +537,7 @@ export default function HomePage() {
           </div>
           {!loading && (
             <p className="text-sm text-stone-400 mt-0.5">
-              {stories.length}{hasMore ? '+' : ''} {stories.length === 1 ? 'historia' : 'historias'}
+              {stories.length}{hasMore ? '+' : ''} {stories.length === 1 ? 'story' : 'stories'}
               {playlistId && playlists.find(p => p.id === Number(playlistId))?.description && (
                 <span className="ml-2 italic">· {playlists.find(p => p.id === Number(playlistId)).description}</span>
               )}
@@ -548,7 +548,7 @@ export default function HomePage() {
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 text-stone-400">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600 mb-4"></div>
-            <p>Cargando historias...</p>
+            <p>Loading stories...</p>
           </div>
         ) : error ? (
           <div className="bg-red-50 border border-red-200 text-red-600 p-4 rounded-xl text-center">
@@ -557,9 +557,9 @@ export default function HomePage() {
         ) : stories.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <span className="text-5xl mb-4">📚</span>
-            <h3 className="text-xl font-bold text-stone-800">Sin historias</h3>
+            <h3 className="text-xl font-bold text-stone-800">No stories</h3>
             <p className="text-stone-500 max-w-sm mt-2">
-              {playlistId ? 'Esta playlist está vacía.' : 'La biblioteca está vacía.'}
+              {playlistId ? 'This playlist is empty.' : 'The library is empty.'}
             </p>
           </div>
         ) : (
@@ -608,7 +608,7 @@ export default function HomePage() {
                             ? 'bg-amber-50 text-amber-600'
                             : 'bg-emerald-50 text-emerald-700'
                         }`}>
-                          {story.review_count === 0 ? 'Sin revisar' : `${story.review_count} ${story.review_count === 1 ? 'revisión' : 'revisiones'}`}
+                          {story.review_count === 0 ? 'Not reviewed' : `${story.review_count} ${story.review_count === 1 ? 'review' : 'reviews'}`}
                         </span>
                       </div>
                       {story.last_reviewed_at && (
@@ -625,14 +625,14 @@ export default function HomePage() {
                     className="w-full bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-center py-3 rounded-xl font-bold transition-all shadow-sm shadow-emerald-900/20 flex items-center justify-center gap-2 mb-3"
                   >
                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                    Leer y escuchar
+                    Read & listen
                   </Link>
 
                   {/* Secondary actions */}
                   <div className="flex gap-2 mb-3">
                     <button
                       onClick={() => { setStoryToAddToPlaylist(story); setShowPlaylistModal(true); }}
-                      title="Agregar a playlist"
+                      title="Add to playlist"
                       className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold border border-stone-200 text-stone-500 hover:border-emerald-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all"
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -644,13 +644,13 @@ export default function HomePage() {
                     {playlistId && (
                       <button
                         onClick={() => setStoryToRemove(story)}
-                        title="Quitar de esta playlist"
+                        title="Remove from this playlist"
                         className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold border border-stone-200 text-stone-400 hover:border-red-300 hover:text-red-500 hover:bg-red-50 transition-all"
                       >
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                         </svg>
-                        Quitar de playlist
+                        Remove from playlist
                       </button>
                     )}
                   </div>
@@ -701,10 +701,10 @@ function formatRelativeDate(dateStr) {
   const diffMs = now - date
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
-  if (diffDays === 0) return 'hoy'
-  if (diffDays === 1) return 'ayer'
-  if (diffDays < 7) return `hace ${diffDays} días`
-  if (diffDays < 30) return `hace ${Math.floor(diffDays / 7)} sem.`
-  if (diffDays < 365) return `hace ${Math.floor(diffDays / 30)} meses`
-  return `hace ${Math.floor(diffDays / 365)} años`
+  if (diffDays === 0) return 'today'
+  if (diffDays === 1) return 'yesterday'
+  if (diffDays < 7) return `${diffDays} days ago`
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} wk. ago`
+  if (diffDays < 365) return `${Math.floor(diffDays / 30)} mo. ago`
+  return `${Math.floor(diffDays / 365)} yr. ago`
 }

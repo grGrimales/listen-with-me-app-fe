@@ -115,7 +115,7 @@ export default function PlaylistsPage() {
             </div>
             <h3 className="text-2xl font-bold text-stone-800 text-center mb-2">Delete Playlist?</h3>
             <p className="text-stone-500 text-center mb-8 font-medium">
-              ¿Eliminar <span className="text-stone-800 font-bold">"{playlistToDelete.name}"</span>? Las historias no se borrarán, solo la colección.
+              Delete <span className="text-stone-800 font-bold">"{playlistToDelete.name}"</span>? The stories won't be deleted, only the collection.
             </p>
             <div className="flex flex-col gap-3">
               <button
@@ -219,7 +219,7 @@ export default function PlaylistsPage() {
                   <div className="flex items-start justify-between mb-2">
                     <button
                       onClick={() => handleToggleFavorite(p)}
-                      title={p.is_favorite ? 'Quitar de favoritos' : 'Marcar como favorito'}
+                      title={p.is_favorite ? 'Remove from favorites' : 'Mark as favorite'}
                       className="transition-transform active:scale-110"
                     >
                       {p.is_favorite
