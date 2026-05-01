@@ -3,6 +3,87 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getPlaylists, getStory, getZenStories, logZenListen } from '../api/stories'
 
+function ZenPlaylistCombobox({ playlists, selectedId, onChange }) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const ref = useRef(null)
+  const inputRef = useRef(null)
+
+  const selected = playlists.find(p => p.id === selectedId)
+  const displayValue = open ? search : (selected ? selected.name : 'Todas las historias')
+  const filtered = playlists.filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
+
+  useEffect(() => {
+    function onOutside(e) {
+      if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setSearch('') }
+    }
+    document.addEventListener('mousedown', onOutside)
+    return () => document.removeEventListener('mousedown', onOutside)
+  }, [])
+
+  function select(id) { onChange(id); setOpen(false); setSearch('') }
+
+  return (
+    <div ref={ref} className="relative">
+      <div
+        onClick={() => { setOpen(true); setSearch(''); setTimeout(() => inputRef.current?.focus(), 0) }}
+        className={`flex items-center gap-2 border rounded-xl px-3 py-3 bg-stone-900 cursor-text transition-all ${open ? 'border-emerald-500 ring-2 ring-emerald-500/20' : 'border-stone-700 hover:border-stone-500'}`}
+      >
+        <svg className="w-4 h-4 text-stone-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h10M4 18h10" />
+        </svg>
+        <input
+          ref={inputRef}
+          value={displayValue}
+          onChange={e => { setSearch(e.target.value); setOpen(true) }}
+          onFocus={() => { setOpen(true); setSearch('') }}
+          readOnly={!open}
+          placeholder="Todas las historias"
+          className="flex-1 outline-none text-sm bg-transparent text-stone-200 placeholder-stone-600 cursor-pointer"
+        />
+        {selectedId && (
+          <button onClick={e => { e.stopPropagation(); select(null) }} className="text-stone-600 hover:text-stone-400 flex-shrink-0">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        )}
+        <svg className={`w-4 h-4 text-stone-500 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </div>
+
+      {open && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-stone-900 border border-stone-700 rounded-xl shadow-2xl z-30 overflow-hidden">
+          <div className="max-h-52 overflow-y-auto">
+            <button
+              onClick={() => select(null)}
+              className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors ${!selectedId ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-stone-400 hover:bg-stone-800'}`}
+            >
+              <span>📚</span> Todas las historias
+            </button>
+            {filtered.length === 0 && search && (
+              <p className="px-4 py-3 text-sm text-stone-600 italic">Sin resultados para "{search}"</p>
+            )}
+            {filtered.map(p => (
+              <button
+                key={p.id}
+                onClick={() => select(p.id)}
+                className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors ${selectedId === p.id ? 'bg-emerald-600/20 text-emerald-400 font-semibold' : 'text-stone-400 hover:bg-stone-800'}`}
+              >
+                {p.is_favorite
+                  ? <svg className="w-4 h-4 text-amber-400 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                  : <svg className="w-4 h-4 text-stone-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h10M4 18h10" /></svg>
+                }
+                <span className="flex-1 truncate">{p.name}</span>
+                <span className="text-xs text-stone-600 flex-shrink-0">{p.story_count}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 const SORT_OPTIONS = [
   { value: 'random',      label: 'Aleatorio',           icon: '🎲' },
   { value: 'newest',      label: 'Más recientes',        icon: '🆕' },
@@ -58,35 +139,30 @@ function SetupScreen({ onStart }) {
         {/* Playlist */}
         <section className="w-full">
           <label className="block text-xs font-bold uppercase tracking-widest text-stone-500 mb-3">Playlist</label>
-          <div className="grid grid-cols-1 gap-2">
-            <button
-              onClick={() => setPlaylistId(null)}
-              className={`flex items-center gap-3 px-4 py-3 rounded-2xl border text-sm font-semibold transition-all ${
-                playlistId === null
-                  ? 'bg-emerald-600 border-emerald-600 text-white'
-                  : 'bg-stone-900 border-stone-700 text-stone-300 hover:border-stone-500'
-              }`}
-            >
-              <span>📚</span> Todas las historias
-            </button>
-            {playlists.map(p => (
-              <button
-                key={p.id}
-                onClick={() => setPlaylistId(p.id)}
-                className={`flex items-center gap-3 px-4 py-3 rounded-2xl border text-sm font-semibold transition-all text-left ${
-                  playlistId === p.id
-                    ? 'bg-emerald-600 border-emerald-600 text-white'
-                    : 'bg-stone-900 border-stone-700 text-stone-300 hover:border-stone-500'
-                }`}
-              >
-                <span>📁</span>
-                <span className="flex-1 truncate">{p.name}</span>
-                <span className={`text-xs ${playlistId === p.id ? 'text-emerald-200' : 'text-stone-600'}`}>
-                  {p.story_count} historias
-                </span>
-              </button>
-            ))}
-          </div>
+          <ZenPlaylistCombobox
+            playlists={playlists}
+            selectedId={playlistId}
+            onChange={setPlaylistId}
+          />
+          {/* Favorite shortcuts */}
+          {playlists.some(p => p.is_favorite) && (
+            <div className="flex flex-wrap gap-2 mt-3">
+              {playlists.filter(p => p.is_favorite).map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => setPlaylistId(playlistId === p.id ? null : p.id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
+                    playlistId === p.id
+                      ? 'bg-amber-400 text-stone-900 border-amber-400'
+                      : 'bg-stone-900 text-amber-400 border-amber-800 hover:border-amber-500'
+                  }`}
+                >
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          )}
         </section>
 
         {/* Order */}
