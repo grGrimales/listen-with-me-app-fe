@@ -260,7 +260,7 @@ export default function StoryDetailPage() {
     // Sort by length descending to match longer phrases first
     const sortedVocab = [...userVocab].sort((a, b) => b.phrase.length - a.phrase.length)
     const phrases = sortedVocab.map(v => v.phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-    const pattern = new RegExp(`(${phrases.join('|')})`, 'gi')
+    const pattern = new RegExp(`(\\b(?:${phrases.join('|')})\\b)`, 'gi')
     
     const parts = text.split(pattern)
     return parts.map((part, i) => {
