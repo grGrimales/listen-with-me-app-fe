@@ -436,8 +436,6 @@ function PlayerScreen({ config, onEnd }) {
   }
 
   function skipNext() {
-    const s = queueRef.current[idxRef.current]
-    if (s) logListen(s.id)
     advanceStory()
   }
 
@@ -484,7 +482,7 @@ function PlayerScreen({ config, onEnd }) {
       {/* Top bar */}
       <header className="px-6 py-4 flex items-center justify-between border-b border-stone-800/50">
         <button
-          onClick={() => { const s = queueRef.current[idxRef.current]; if (s) logListen(s.id); onEnd(countRef.current) }}
+          onClick={() => onEnd(countRef.current)}
           className="text-stone-600 hover:text-stone-400 transition text-sm"
         >
           ✕ Exit
