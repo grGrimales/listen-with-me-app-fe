@@ -102,9 +102,8 @@ export async function uploadParagraphImage(paragraphId, file, token) {
   return data
 }
 
-export const deleteParagraphImage = (imageId, token) => 
-  request(`/api/paragraphs/images/${imageId}`, token, { method: 'DELETE' })
-
+export const deleteParagraphImage = (imageId, token) =>
+  request(`/api/paragraph-images/${imageId}`, token, { method: 'DELETE' })
 export const markStoryAsReviewed = (id, token) => request(`/api/stories/${id}/review`, token, { method: 'POST' })
 export const getUserStats = (token) => request('/api/stats', token)
 
@@ -151,3 +150,18 @@ export const logZenListen = (storyId, token) => request('/api/zen/listen', token
   method: 'POST',
   body: JSON.stringify({ story_id: storyId })
 })
+
+// Sentences & Evaluation
+export const generateSentences = (storyId, token) => request(`/api/stories/${storyId}/sentences/generate`, token, { method: 'POST' })
+export const previewSentences = (storyId, token) => request(`/api/stories/${storyId}/sentences/preview`, token, { method: 'POST' })
+export const saveSentences = (storyId, sentences, token) => request(`/api/stories/${storyId}/sentences`, token, {
+  method: 'POST',
+  body: JSON.stringify(sentences)
+})
+export const getStorySentences = (storyId, token) => request(`/api/stories/${storyId}/sentences`, token)
+export const evaluateSentence = (sentenceId, evaluationData, token) => request(`/api/sentences/${sentenceId}/evaluate`, token, {
+  method: 'POST',
+  body: JSON.stringify(evaluationData)
+})
+export const getStorySentenceStats = (storyId, token) => request(`/api/stories/${storyId}/sentences/stats`, token)
+export const getSentenceHistory = (sentenceId, token) => request(`/api/sentences/${sentenceId}/history`, token)

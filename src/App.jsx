@@ -6,6 +6,8 @@ import RegisterPage from './pages/RegisterPage'
 import HomePage from './pages/HomePage'
 import CreateStoryPage from './pages/CreateStoryPage'
 import StoryDetailPage from './pages/StoryDetailPage'
+import StoryEvaluationPage from './pages/StoryEvaluationPage'
+import AdminSentenceManagerPage from './pages/AdminSentenceManagerPage'
 import AssetsManagerPage from './pages/AssetsManagerPage'
 import DeletedStoriesPage from './pages/DeletedStoriesPage'
 import StatsPage from './pages/StatsPage'
@@ -32,6 +34,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <StoryDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/stories/:id/evaluation"
+            element={
+              <ProtectedRoute>
+                <StoryEvaluationPage />
               </ProtectedRoute>
             }
           />
@@ -64,6 +74,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <AssetsManagerPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/stories/:id/sentences"
+            element={
+              <ProtectedRoute>
+                <AdminSentenceManagerPage />
               </ProtectedRoute>
             }
           />

@@ -97,7 +97,7 @@ const FONT_DEFAULT = 20
 export default function StoryDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { token } = useAuth()
+  const { token, user } = useAuth()
   const [story, setStory] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -649,6 +649,20 @@ export default function StoryDetailPage() {
             >
               🖼️ Images
             </button>
+            <Link
+              to={`/stories/${id}/evaluation`}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${c.chip} hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200`}
+            >
+              📝 Evaluate
+            </Link>
+            {user?.roles?.includes('admin') && (
+              <Link
+                to={`/admin/stories/${id}/sentences`}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${c.chip} hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200`}
+              >
+                ⚙️ Manage Sentences
+              </Link>
+            )}
             <button
               onClick={() => setIsLooping(v => !v)}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
