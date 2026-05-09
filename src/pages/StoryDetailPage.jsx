@@ -149,14 +149,24 @@ export default function StoryDetailPage() {
   const [paraCurrentTime, setParaCurrentTime] = useState(0)
   const [paraDuration, setParaDuration] = useState(0)
   const [isLooping, setIsLooping] = useState(false)
-  const [paraAdvanceMode, setParaAdvanceMode] = useState(false)
-  const [loopCounter, setLoopCounter] = useState(0)
 
   const audioRef = useRef(null)
   const settingsRef = useRef(null)
   const selectionTimerRef = useRef(null)
   const paraDelayRef = useRef(null)
   const paraRefs = useRef({})
+
+  // Refs for audio event closures
+  const playingParaIdRef = useRef(null)
+  const isLoopingRef = useRef(false)
+  const storyRef = useRef(null)
+  const currentVoiceRef = useRef(null)
+  const playParagraphRef = useRef(null)
+
+  useEffect(() => { playingParaIdRef.current = playingParaId }, [playingParaId])
+  useEffect(() => { isLoopingRef.current = isLooping }, [isLooping])
+  useEffect(() => { storyRef.current = story }, [story])
+  useEffect(() => { currentVoiceRef.current = currentVoice }, [currentVoice])
 
   useEffect(() => {
     async function load() {
@@ -294,98 +304,125 @@ export default function StoryDetailPage() {
     return () => document.removeEventListener('mousedown', onOutsideClick)
   }, [showSettings])
 
-  // Voice-mode audio events
+  // ── Audio Event Management ────────────────────────────────────────────────
   useEffect(() => {
-    if (!currentVoice || !audioRef.current) return
     const audio = audioRef.current
+    if (!audio) return
+
     const onTimeUpdate = () => {
-      const ms = audio.currentTime * 1000
-      setCurrentTime(ms)
-      const active = currentVoice.timestamps?.find(ts => ms >= ts.start_ms && ms <= ts.end_ms)
-      setActiveParagraphId(active ? active.paragraph_id : null)
-    }
-    const onEnded = () => { 
-      if (isLooping) {
-        audio.currentTime = 0
-        audio.play()
-        setIsPlaying(true)
+      const voice = currentVoiceRef.current
+      if (voice) {
+        const ms = audio.currentTime * 1000
+        setCurrentTime(ms)
+        const active = voice.timestamps?.find(ts => ms >= ts.start_ms && ms <= ts.end_ms)
+        setActiveParagraphId(active ? active.paragraph_id : null)
       } else {
-        setIsPlaying(false)
-        setActiveParagraphId(null) 
+        setParaCurrentTime(audio.currentTime)
       }
     }
-    audio.addEventListener('timeupdate', onTimeUpdate)
-    audio.addEventListener('ended', onEnded)
-    return () => { audio.removeEventListener('timeupdate', onTimeUpdate); audio.removeEventListener('ended', onEnded) }
-  }, [currentVoice, isLooping])
 
-  // Paragraph-mode audio events
-  useEffect(() => {
-    if (currentVoice || !audioRef.current) return
-    const audio = audioRef.current
-    const onTimeUpdate = () => setParaCurrentTime(audio.currentTime)
-    const onDurationChange = () => setParaDuration(audio.duration || 0)
+    const onDurationChange = () => {
+      if (!currentVoiceRef.current) setParaDuration(audio.duration || 0)
+    }
+
     const onEnded = () => {
-      setParaIsPlaying(false)
-      if (!story) return
+      const voice = currentVoiceRef.current
 
-      if (paraAdvanceMode) {
-        const idx = story.paragraphs.findIndex(p => p.id === playingParaId)
-        const next = story.paragraphs.slice(idx + 1).find(p => p.audio_url)
+      if (voice) {
+        if (isLoopingRef.current) {
+          audio.currentTime = 0
+          audio.play().catch(err => console.error("Voice loop failed:", err))
+          setIsPlaying(true)
+        } else {
+          setIsPlaying(false)
+          setActiveParagraphId(null)
+        }
+      } else {
+        setParaIsPlaying(false)
+        const s = storyRef.current
+        const currentId = playingParaIdRef.current
+        if (!s || !currentId) return
+
+        const idx = s.paragraphs.findIndex(p => p.id === currentId)
+        const next = s.paragraphs.slice(idx + 1).find(p => p.audio_url)
 
         if (next) {
-          paraDelayRef.current = setTimeout(() => playParagraph(next, true), 800)
-        } else if (isLooping) {
-          const first = story.paragraphs.find(p => p.audio_url)
-          if (first) paraDelayRef.current = setTimeout(() => playParagraph(first, true), 800)
+          paraDelayRef.current = setTimeout(() => playParagraphRef.current?.(next), 600)
+        } else if (isLoopingRef.current) {
+          const first = s.paragraphs.find(p => p.audio_url)
+          if (first) paraDelayRef.current = setTimeout(() => playParagraphRef.current?.(first), 600)
         }
-      } else if (isLooping && loopCounter < 99) {
-        setLoopCounter(prev => prev + 1)
-        paraDelayRef.current = setTimeout(() => {
-          if (audioRef.current) {
-            audioRef.current.currentTime = 0
-            audioRef.current.play()
-            setParaIsPlaying(true)
-          }
-        }, 800)
       }
     }
+
     audio.addEventListener('timeupdate', onTimeUpdate)
     audio.addEventListener('durationchange', onDurationChange)
     audio.addEventListener('ended', onEnded)
+
     return () => {
       audio.removeEventListener('timeupdate', onTimeUpdate)
       audio.removeEventListener('durationchange', onDurationChange)
       audio.removeEventListener('ended', onEnded)
-      clearTimeout(paraDelayRef.current)
+      if (paraDelayRef.current) clearTimeout(paraDelayRef.current)
     }
-  }, [currentVoice, playingParaId, story, isLooping, paraAdvanceMode, loopCounter])
+  }, [story]) // Re-runs when story loads (audio element appears in DOM)
 
-  // Voice-mode controls
+  // ── Audio Controls ─────────────────────────────────────────────────────────
   function toggleVoicePlay() {
     if (!audioRef.current) return
-    if (audioRef.current.paused) { audioRef.current.play(); setIsPlaying(true) }
-    else { audioRef.current.pause(); setIsPlaying(false) }
+    if (audioRef.current.paused) {
+      const playPromise = audioRef.current.play()
+      if (playPromise !== undefined) {
+        playPromise.then(() => setIsPlaying(true)).catch(err => {
+          console.error("Voice playback failed:", err)
+          setIsPlaying(false)
+        })
+      }
+    } else {
+      audioRef.current.pause()
+      setIsPlaying(false)
+    }
   }
+
   function handleParagraphClick(pId) {
-    if (!currentVoice) return
+    if (!currentVoice || !audioRef.current) return
     const ts = currentVoice.timestamps?.find(t => t.paragraph_id === pId)
-    if (ts) { audioRef.current.currentTime = ts.start_ms / 1000; audioRef.current.play(); setIsPlaying(true) }
+    if (ts) {
+      audioRef.current.currentTime = ts.start_ms / 1000
+      const playPromise = audioRef.current.play()
+      if (playPromise !== undefined) {
+        playPromise.then(() => setIsPlaying(true)).catch(err => {
+          console.error("Paragraph seek-play failed:", err)
+          setIsPlaying(false)
+        })
+      }
+    }
   }
 
   // Paragraph-mode controls
-  function playParagraph(para, shouldAdvance = false) {
+  function playParagraph(para) {
     if (!audioRef.current) return
-    audioRef.current.src = para.audio_url
-    audioRef.current.currentTime = 0
-    audioRef.current.play()
+
+    const audio = audioRef.current
+    audio.pause()
+    audio.src = para.audio_url
+
     setPlayingParaId(para.id)
-    setParaIsPlaying(true)
     setParaCurrentTime(0)
     setActiveParagraphId(para.id)
-    setParaAdvanceMode(shouldAdvance)
-    setLoopCounter(0)
+
+    const playPromise = audio.play()
+    if (playPromise !== undefined) {
+      playPromise.then(() => {
+        setParaIsPlaying(true)
+      }).catch(error => {
+        console.error("Paragraph playback failed:", error)
+        setParaIsPlaying(false)
+      })
+    }
   }
+  playParagraphRef.current = playParagraph
+
   // Auto-scroll to active paragraph
   useEffect(() => {
     if (!activeParagraphId) return
@@ -393,29 +430,35 @@ export default function StoryDetailPage() {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }, [activeParagraphId])
 
-  function toggleParagraph(para, shouldAdvance = false) {
+  function toggleParagraph(para) {
     if (!audioRef.current) return
     if (playingParaId === para.id) {
-      if (paraIsPlaying) {
-        if (shouldAdvance && !paraAdvanceMode) {
-          setParaAdvanceMode(true)
-        } else {
-          audioRef.current.pause()
-          setParaIsPlaying(false)
+      if (paraIsPlaying) { audioRef.current.pause(); setParaIsPlaying(false) }
+      else { 
+        const playPromise = audioRef.current.play()
+        if (playPromise !== undefined) {
+          playPromise.then(() => setParaIsPlaying(true)).catch(err => {
+            console.error("Paragraph resume failed:", err)
+            setParaIsPlaying(false)
+          })
         }
-      } else {
-        setParaAdvanceMode(shouldAdvance)
-        audioRef.current.play()
-        setParaIsPlaying(true)
       }
     } else {
-      playParagraph(para, shouldAdvance)
+      playParagraph(para)
     }
   }
   function paraSeek(e) {
     if (!audioRef.current || !paraDuration) return
     const rect = e.currentTarget.getBoundingClientRect()
-    audioRef.current.currentTime = ((e.clientX - rect.left) / rect.width) * paraDuration
+    const clickX = e.clientX - rect.left
+    const percent = clickX / rect.width
+    const newTime = percent * paraDuration
+    
+    // Safety check
+    if (isNaN(newTime) || newTime < 0) return
+    
+    audioRef.current.currentTime = newTime
+    setParaCurrentTime(newTime)
   }
 
   async function handleMarkAsReviewed() {
@@ -700,13 +743,18 @@ export default function StoryDetailPage() {
           </div>
 
           {/* Voice selector */}
-          {story.voices?.length > 1 && (
+          {(story.voices?.length > 0 || hasParagraphAudio) && (
             <div className="mt-8 flex items-center gap-3">
-              <span className={`text-xs font-bold uppercase ${c.settingsLabel}`}>Voice:</span>
+              <span className={`text-xs font-bold uppercase ${c.settingsLabel}`}>Audio:</span>
               <div className={`flex p-1 rounded-xl ${theme === 'night' ? 'bg-stone-800' : 'bg-stone-100'}`}>
-                {story.voices.map(v => (
+                {story.voices?.map(v => (
                   <button key={`voice-${v.id}`}
-                    onClick={() => { const wasPlaying = isPlaying; setCurrentVoice(v); if (wasPlaying) setTimeout(() => audioRef.current?.play(), 100) }}
+                    onClick={() => { 
+                      const wasPlaying = isPlaying || paraIsPlaying
+                      setCurrentVoice(v)
+                      setPlayingParaId(null)
+                      if (wasPlaying) setTimeout(() => audioRef.current?.play(), 100)
+                    }}
                     className={`px-3 py-1 text-xs font-bold rounded-lg transition ${
                       currentVoice?.id === v.id ? 'bg-white text-emerald-700 shadow-sm' : `${c.heroSub} hover:text-emerald-600`
                     }`}
@@ -714,6 +762,21 @@ export default function StoryDetailPage() {
                     {v.name}
                   </button>
                 ))}
+                {hasParagraphAudio && (
+                  <button
+                    onClick={() => { 
+                      audioRef.current?.pause()
+                      setCurrentVoice(null)
+                      setIsPlaying(false)
+                      setParaIsPlaying(false)
+                    }}
+                    className={`px-3 py-1 text-xs font-bold rounded-lg transition ${
+                      !currentVoice ? 'bg-white text-emerald-700 shadow-sm' : `${c.heroSub} hover:text-emerald-600`
+                    }`}
+                  >
+                    Paragraphs
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -750,7 +813,7 @@ export default function StoryDetailPage() {
 
                   {!isVoiceMode && p.audio_url && (
                     <button
-                      onClick={() => toggleParagraph(p, false)}
+                      onClick={() => toggleParagraph(p)}
                       className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all ${
                         isThisParaPlaying
                           ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/20'
@@ -897,7 +960,7 @@ export default function StoryDetailPage() {
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[90%] max-w-md z-50">
           <div className="bg-stone-900/90 backdrop-blur-md text-white rounded-3xl shadow-2xl p-4 border border-white/10">
             <div className="flex items-center gap-3 mb-3">
-              <button onClick={() => playingPara && toggleParagraph(playingPara, true)} className="w-10 h-10 bg-emerald-600 hover:bg-emerald-500 rounded-xl flex items-center justify-center transition-all active:scale-95 flex-shrink-0">
+              <button onClick={() => playingPara && toggleParagraph(playingPara)} className="w-10 h-10 bg-emerald-600 hover:bg-emerald-500 rounded-xl flex items-center justify-center transition-all active:scale-95 flex-shrink-0">
                 {paraIsPlaying
                   ? <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
                   : <svg className="w-4 h-4 translate-x-px" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" /></svg>
