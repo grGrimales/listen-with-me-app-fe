@@ -149,6 +149,8 @@ export default function StoryDetailPage() {
   const [paraCurrentTime, setParaCurrentTime] = useState(0)
   const [paraDuration, setParaDuration] = useState(0)
   const [isLooping, setIsLooping] = useState(false)
+  const [paraAdvanceMode, setParaAdvanceMode] = useState(false)
+  const [loopCounter, setLoopCounter] = useState(0)
 
   const audioRef = useRef(null)
   const settingsRef = useRef(null)
@@ -326,14 +328,26 @@ export default function StoryDetailPage() {
     const onEnded = () => {
       setParaIsPlaying(false)
       if (!story) return
-      const idx = story.paragraphs.findIndex(p => p.id === playingParaId)
-      const next = story.paragraphs.slice(idx + 1).find(p => p.audio_url)
 
-      if (next) {
-        paraDelayRef.current = setTimeout(() => playParagraph(next), 800)
-      } else if (isLooping) {
-        const first = story.paragraphs.find(p => p.audio_url)
-        if (first) paraDelayRef.current = setTimeout(() => playParagraph(first), 800)
+      if (paraAdvanceMode) {
+        const idx = story.paragraphs.findIndex(p => p.id === playingParaId)
+        const next = story.paragraphs.slice(idx + 1).find(p => p.audio_url)
+
+        if (next) {
+          paraDelayRef.current = setTimeout(() => playParagraph(next, true), 800)
+        } else if (isLooping) {
+          const first = story.paragraphs.find(p => p.audio_url)
+          if (first) paraDelayRef.current = setTimeout(() => playParagraph(first, true), 800)
+        }
+      } else if (isLooping && loopCounter < 99) {
+        setLoopCounter(prev => prev + 1)
+        paraDelayRef.current = setTimeout(() => {
+          if (audioRef.current) {
+            audioRef.current.currentTime = 0
+            audioRef.current.play()
+            setParaIsPlaying(true)
+          }
+        }, 800)
       }
     }
     audio.addEventListener('timeupdate', onTimeUpdate)
@@ -345,7 +359,7 @@ export default function StoryDetailPage() {
       audio.removeEventListener('ended', onEnded)
       clearTimeout(paraDelayRef.current)
     }
-  }, [currentVoice, playingParaId, story, isLooping])
+  }, [currentVoice, playingParaId, story, isLooping, paraAdvanceMode, loopCounter])
 
   // Voice-mode controls
   function toggleVoicePlay() {
@@ -360,7 +374,7 @@ export default function StoryDetailPage() {
   }
 
   // Paragraph-mode controls
-  function playParagraph(para) {
+  function playParagraph(para, shouldAdvance = false) {
     if (!audioRef.current) return
     audioRef.current.src = para.audio_url
     audioRef.current.currentTime = 0
@@ -369,6 +383,8 @@ export default function StoryDetailPage() {
     setParaIsPlaying(true)
     setParaCurrentTime(0)
     setActiveParagraphId(para.id)
+    setParaAdvanceMode(shouldAdvance)
+    setLoopCounter(0)
   }
   // Auto-scroll to active paragraph
   useEffect(() => {
@@ -377,13 +393,23 @@ export default function StoryDetailPage() {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }, [activeParagraphId])
 
-  function toggleParagraph(para) {
+  function toggleParagraph(para, shouldAdvance = false) {
     if (!audioRef.current) return
     if (playingParaId === para.id) {
-      if (paraIsPlaying) { audioRef.current.pause(); setParaIsPlaying(false) }
-      else { audioRef.current.play(); setParaIsPlaying(true) }
+      if (paraIsPlaying) {
+        if (shouldAdvance && !paraAdvanceMode) {
+          setParaAdvanceMode(true)
+        } else {
+          audioRef.current.pause()
+          setParaIsPlaying(false)
+        }
+      } else {
+        setParaAdvanceMode(shouldAdvance)
+        audioRef.current.play()
+        setParaIsPlaying(true)
+      }
     } else {
-      playParagraph(para)
+      playParagraph(para, shouldAdvance)
     }
   }
   function paraSeek(e) {
@@ -724,7 +750,7 @@ export default function StoryDetailPage() {
 
                   {!isVoiceMode && p.audio_url && (
                     <button
-                      onClick={() => toggleParagraph(p)}
+                      onClick={() => toggleParagraph(p, false)}
                       className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all ${
                         isThisParaPlaying
                           ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/20'
@@ -871,7 +897,7 @@ export default function StoryDetailPage() {
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[90%] max-w-md z-50">
           <div className="bg-stone-900/90 backdrop-blur-md text-white rounded-3xl shadow-2xl p-4 border border-white/10">
             <div className="flex items-center gap-3 mb-3">
-              <button onClick={() => playingPara && toggleParagraph(playingPara)} className="w-10 h-10 bg-emerald-600 hover:bg-emerald-500 rounded-xl flex items-center justify-center transition-all active:scale-95 flex-shrink-0">
+              <button onClick={() => playingPara && toggleParagraph(playingPara, true)} className="w-10 h-10 bg-emerald-600 hover:bg-emerald-500 rounded-xl flex items-center justify-center transition-all active:scale-95 flex-shrink-0">
                 {paraIsPlaying
                   ? <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
                   : <svg className="w-4 h-4 translate-x-px" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" /></svg>
