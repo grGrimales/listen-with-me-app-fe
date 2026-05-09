@@ -45,6 +45,17 @@ export default function StoryEvaluationPage() {
         setStory(storyData)
         setSentences(sentenceData)
         setStats(statsData)
+
+        // Resume progress: find the first sentence that hasn't been attempted yet
+        if (sentenceData && sentenceData.length > 0) {
+          const firstUnattempted = sentenceData.findIndex(s => {
+            const sStat = statsData.find(st => st.sentence_id === s.id)
+            return !sStat || sStat.total_attempts === 0
+          })
+          if (firstUnattempted !== -1) {
+            setCurrentIndex(firstUnattempted)
+          }
+        }
       } catch (err) {
         setError(err.message)
       } finally {
