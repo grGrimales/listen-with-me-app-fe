@@ -168,8 +168,15 @@ export default function AssetsManagerPage() {
   )
 }
 
+const LANG_META = {
+  en: { flag: '🇺🇸', label: 'English', color: 'bg-blue-100 text-blue-700' },
+  pt: { flag: '🇧🇷', label: 'Português', color: 'bg-green-100 text-green-700' },
+  es: { flag: '🇪🇸', label: 'Español', color: 'bg-amber-100 text-amber-700' },
+}
+
 function ParagraphAssetCard({ paragraph: p, index, token, ttsVoices, ttsModels, onAudioUploaded, onAudioDeleted, onAudioGenerated, onImageUploaded, onImageDeleted, onError }) {
-  const [showTTSModal, setShowTTSModal] = useState(false)
+  // null = closed, 'en'|'pt'|'es' = open for that language
+  const [showTTSModal, setShowTTSModal] = useState(null)
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden">
@@ -222,40 +229,81 @@ function ParagraphAssetCard({ paragraph: p, index, token, ttsVoices, ttsModels, 
         {/* Audio Section */}
         <div>
           <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-4">Audio</p>
-          {p.audio_url ? (
-            <div className="space-y-4">
-              <audio src={p.audio_url} controls className="w-full h-10" />
-              <div className="flex items-center gap-2 bg-stone-50 p-2 rounded-xl border border-stone-100">
-                <p className="text-[10px] text-stone-400 truncate flex-1 font-mono">{p.audio_url}</p>
-                <button
-                  onClick={onAudioDeleted}
-                  className="text-red-500 hover:text-red-700 p-1.5 rounded-lg hover:bg-red-100 transition"
-                  title="Delete audio"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
-              </div>
-              <AudioUploadButton paragraphId={p.id} token={token} onSuccess={onAudioUploaded} onError={onError} label="Replace audio" />
-              <button
-                onClick={() => setShowTTSModal(true)}
-                className="w-full border border-violet-300 text-violet-700 bg-violet-50 hover:bg-violet-100 px-3 py-2 rounded-xl text-xs font-bold transition"
-              >
-                Regenerate with AI
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <AudioUploadButton paragraphId={p.id} token={token} onSuccess={onAudioUploaded} onError={onError} label="Upload audio" />
-              <button
-                onClick={() => setShowTTSModal(true)}
-                className="w-full border border-violet-300 text-violet-700 bg-violet-50 hover:bg-violet-100 px-3 py-2 rounded-xl text-xs font-bold transition"
-              >
-                Generate with AI
-              </button>
-            </div>
-          )}
+          <div className="space-y-5">
+
+            {/* English audio (main) */}
+            {(() => {
+              const meta = LANG_META.en
+              return (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${meta.color}`}>{meta.flag} {meta.label}</span>
+                  </div>
+                  {p.audio_url ? (
+                    <div className="space-y-2">
+                      <audio src={p.audio_url} controls className="w-full h-10" />
+                      <div className="flex gap-2">
+                        <AudioUploadButton paragraphId={p.id} token={token} onSuccess={onAudioUploaded} onError={onError} label="Replace" compact />
+                        <button
+                          onClick={onAudioDeleted}
+                          className="flex items-center gap-1 text-xs font-semibold text-red-500 hover:text-red-700 border border-red-200 hover:bg-red-50 px-3 py-1.5 rounded-xl transition"
+                        >
+                          Delete
+                        </button>
+                        <button
+                          onClick={() => setShowTTSModal('en')}
+                          className="flex-1 border border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100 px-3 py-1.5 rounded-xl text-xs font-bold transition"
+                        >
+                          Regenerate AI
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <AudioUploadButton paragraphId={p.id} token={token} onSuccess={onAudioUploaded} onError={onError} label="Upload" compact />
+                      <button
+                        onClick={() => setShowTTSModal('en')}
+                        className="flex-1 border border-violet-300 text-violet-700 bg-violet-50 hover:bg-violet-100 px-3 py-2 rounded-xl text-xs font-bold transition"
+                      >
+                        Generate AI
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+
+            {/* Translation audios (pt, es, etc.) */}
+            {p.translations?.filter(t => t.language !== 'en').map(t => {
+              const meta = LANG_META[t.language] || { flag: '🌐', label: t.language.toUpperCase(), color: 'bg-stone-100 text-stone-600' }
+              return (
+                <div key={t.language}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${meta.color}`}>{meta.flag} {meta.label}</span>
+                  </div>
+                  {t.audio_url ? (
+                    <div className="space-y-2">
+                      <audio src={t.audio_url} controls className="w-full h-10" />
+                      <button
+                        onClick={() => setShowTTSModal(t.language)}
+                        className="w-full border border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100 px-3 py-1.5 rounded-xl text-xs font-bold transition"
+                      >
+                        Regenerate AI
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowTTSModal(t.language)}
+                      className="w-full border border-violet-300 text-violet-700 bg-violet-50 hover:bg-violet-100 px-3 py-2 rounded-xl text-xs font-bold transition"
+                    >
+                      Generate AI
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+
+          </div>
         </div>
       </div>
 
@@ -265,9 +313,10 @@ function ParagraphAssetCard({ paragraph: p, index, token, ttsVoices, ttsModels, 
           token={token}
           voices={ttsVoices}
           models={ttsModels}
-          onSuccess={() => { setShowTTSModal(false); onAudioGenerated() }}
-          onError={(msg) => { setShowTTSModal(false); onError(msg) }}
-          onClose={() => setShowTTSModal(false)}
+          initialLanguage={showTTSModal}
+          onSuccess={() => { setShowTTSModal(null); onAudioGenerated() }}
+          onError={(msg) => { setShowTTSModal(null); onError(msg) }}
+          onClose={() => setShowTTSModal(null)}
         />
       )}
     </div>
@@ -383,8 +432,13 @@ function ImageUploadButton({ paragraphId, token, onSuccess, onError }) {
   )
 }
 
-function TTSGenerateModal({ paragraphId, token, voices, models, onSuccess, onError, onClose }) {
-  const [voiceId, setVoiceId] = useState(voices[0]?.id || '')
+const LANGUAGES = [
+  { code: 'en', label: '🇺🇸 English' },
+  { code: 'pt', label: '🇧🇷 Português' },
+]
+
+function TTSGenerateModal({ paragraphId, token, voices, models, initialLanguage = 'en', onSuccess, onError, onClose }) {
+  const [language, setLanguage] = useState(initialLanguage)
   const [modelId, setModelId] = useState(models[0]?.id || '')
   const [generating, setGenerating] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
@@ -392,11 +446,23 @@ function TTSGenerateModal({ paragraphId, token, voices, models, onSuccess, onErr
   const [historyLoading, setHistoryLoading] = useState(false)
   const [restoring, setRestoring] = useState(null)
 
+  const filteredVoices = voices.filter(v => (v.language || 'en') === language)
+  const [voiceId, setVoiceId] = useState(() => {
+    const first = voices.find(v => (v.language || 'en') === initialLanguage)
+    return first?.id || voices[0]?.id || ''
+  })
+
+  function handleLanguageChange(lang) {
+    setLanguage(lang)
+    const first = voices.find(v => (v.language || 'en') === lang)
+    setVoiceId(first?.id || '')
+  }
+
   async function handleGenerate() {
     if (!voiceId || !modelId) return
     setGenerating(true)
     try {
-      await generateParagraphAudio(paragraphId, voiceId, modelId, token)
+      await generateParagraphAudio(paragraphId, voiceId, modelId, token, language)
       onSuccess()
     } catch (err) {
       onError(err.message)
@@ -456,16 +522,35 @@ function TTSGenerateModal({ paragraphId, token, voices, models, onSuccess, onErr
 
           <div className="space-y-4">
             <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">Language</label>
+              <div className="flex gap-2">
+                {LANGUAGES.map(l => (
+                  <button
+                    key={l.code}
+                    onClick={() => handleLanguageChange(l.code)}
+                    className={`flex-1 py-2 rounded-xl text-sm font-semibold border transition-all ${
+                      language === l.code
+                        ? 'bg-violet-600 text-white border-violet-600'
+                        : 'border-stone-300 text-stone-600 hover:bg-stone-50'
+                    }`}
+                  >
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
               <label className="block text-sm font-medium text-stone-700 mb-1">Voice</label>
-              {voices.length === 0 ? (
-                <p className="text-sm text-stone-400 italic">No voices available</p>
+              {filteredVoices.length === 0 ? (
+                <p className="text-sm text-stone-400 italic">No voices available for this language</p>
               ) : (
                 <select
                   value={voiceId}
                   onChange={e => setVoiceId(e.target.value)}
                   className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
                 >
-                  {voices.map(v => (
+                  {filteredVoices.map(v => (
                     <option key={v.id} value={v.id}>{v.name}</option>
                   ))}
                 </select>
@@ -498,7 +583,7 @@ function TTSGenerateModal({ paragraphId, token, voices, models, onSuccess, onErr
               </button>
               <button
                 onClick={handleGenerate}
-                disabled={generating || !voiceId || !modelId}
+                disabled={generating || !voiceId || !modelId || filteredVoices.length === 0}
                 className="flex-1 bg-violet-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-violet-500 transition disabled:opacity-50 disabled:grayscale"
               >
                 {generating ? 'Generating…' : 'Generate'}
@@ -556,7 +641,7 @@ function TTSGenerateModal({ paragraphId, token, voices, models, onSuccess, onErr
   )
 }
 
-function AudioUploadButton({ paragraphId, token, onSuccess, onError, label }) {
+function AudioUploadButton({ paragraphId, token, onSuccess, onError, label, compact = false }) {
   const [file, setFile] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [dragging, setDragging] = useState(false)
@@ -603,6 +688,33 @@ function AudioUploadButton({ paragraphId, token, onSuccess, onError, label }) {
     } finally {
       setUploading(false)
     }
+  }
+
+  if (compact) {
+    return (
+      <div className="flex items-center gap-2">
+        <input ref={fileRef} type="file" accept="audio/*" className="hidden" onChange={e => pickFile(e.target.files[0])} />
+        {!file ? (
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="text-xs font-semibold text-stone-600 border border-stone-200 hover:bg-stone-50 px-3 py-1.5 rounded-xl transition"
+          >
+            {label}
+          </button>
+        ) : (
+          <>
+            <span className="text-[10px] text-emerald-700 truncate max-w-[80px]">{file.name}</span>
+            <button
+              onClick={handleUpload}
+              disabled={uploading}
+              className="text-xs font-bold text-white bg-stone-800 hover:bg-stone-700 px-3 py-1.5 rounded-xl transition disabled:opacity-50"
+            >
+              {uploading ? '…' : 'Upload'}
+            </button>
+          </>
+        )}
+      </div>
+    )
   }
 
   return (

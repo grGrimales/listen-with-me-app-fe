@@ -9,11 +9,20 @@ export function AuthProvider({ children }) {
     return saved ? JSON.parse(saved) : null
   })
 
+  const targetLanguage = user?.targetLanguage || 'en'
+
   function saveAuth(token, user) {
+    const userWithLang = { ...user, targetLanguage: user.targetLanguage || 'en' }
     localStorage.setItem('token', token)
-    localStorage.setItem('user', JSON.stringify(user))
+    localStorage.setItem('user', JSON.stringify(userWithLang))
     setToken(token)
-    setUser(user)
+    setUser(userWithLang)
+  }
+
+  function setTargetLanguage(lang) {
+    const updated = { ...user, targetLanguage: lang }
+    localStorage.setItem('user', JSON.stringify(updated))
+    setUser(updated)
   }
 
   function logout() {
@@ -29,7 +38,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ token, user, saveAuth, logout, isAuthenticated: !!token }}>
+    <AuthContext.Provider value={{ token, user, saveAuth, logout, isAuthenticated: !!token, targetLanguage, setTargetLanguage }}>
       {children}
     </AuthContext.Provider>
   )

@@ -36,7 +36,7 @@ export default function CreateStoryPage() {
           content: p.content,
           images: p.images?.map(img => img.image_url) || [],
           audio_url: p.audio_url,
-          translations: p.translations.map(t => ({ language: t.language, content: t.content })),
+          translations: p.translations.map(t => ({ language: t.language, content: t.content, ...(t.audio_url ? { audio_url: t.audio_url } : {}) })),
           vocabulary: p.vocabulary.map(v => ({ word: v.word, definition: v.definition }))
         })),
         voices: story.voices?.map(v => ({
@@ -181,13 +181,33 @@ export default function CreateStoryPage() {
 
                   {preview.paragraphs?.map((p, idx) => (
                     <div key={idx} className="mb-10 pb-6 border-b border-stone-100 last:border-0">
-                      <p className="text-xl leading-relaxed text-stone-800 mb-4">{p.content}</p>
-                      <div className="bg-stone-50 rounded-xl p-4">
-                        <h4 className="text-xs font-bold text-stone-400 uppercase mb-2">Translation</h4>
-                        {p.translations?.map((t, tidx) => (
-                          <p key={tidx} className="text-stone-600 italic">{t.content}</p>
-                        ))}
+                      {/* Main content (English) */}
+                      <div className="flex items-start gap-2 mb-3">
+                        <span className="mt-1 text-xs font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded shrink-0">EN</span>
+                        <p className="text-xl leading-relaxed text-stone-800">{p.content}</p>
                       </div>
+
+                      {/* Translations */}
+                      {p.translations?.length > 0 && (
+                        <div className="bg-stone-50 rounded-xl p-4 space-y-2">
+                          {p.translations.map((t, tidx) => {
+                            const langColors = {
+                              es: 'bg-amber-100 text-amber-700',
+                              pt: 'bg-green-100 text-green-700',
+                            }
+                            const color = langColors[t.language] || 'bg-stone-200 text-stone-600'
+                            return (
+                              <div key={tidx} className="flex items-start gap-2">
+                                <span className={`mt-0.5 text-xs font-bold px-2 py-0.5 rounded shrink-0 uppercase ${color}`}>
+                                  {t.language}
+                                </span>
+                                <p className="text-stone-600 italic">{t.content}</p>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+
                       {p.vocabulary?.length > 0 && (
                         <div className="mt-4 flex flex-wrap gap-2">
                           {p.vocabulary.map((v, vidx) => (
@@ -220,13 +240,43 @@ const defaultStory = {
       position: 1,
       content: "Deep in the heart of the mountains, there was a forest where no birds sang.",
       images: [],
+      audio_url: "",
       translations: [
-        { language: "es", content: "En lo profundo del corazón de las montañas, había un bosque donde ningún pájaro cantaba." }
+        {
+          language: "es",
+          content: "En lo profundo del corazón de las montañas, había un bosque donde ningún pájaro cantaba."
+        },
+        {
+          language: "pt",
+          content: "No coração das montanhas, havia uma floresta onde nenhum pássaro cantava."
+        }
       ],
       vocabulary: [
-        { word: "Deep", definition: "At a great depth" },
-        { word: "Heart", definition: "The central or innermost part" }
+        { word: "deep", definition: "At a great depth; far down or in." },
+        { word: "heart", definition: "The central or innermost part of something." },
+        { word: "forest", definition: "A large area covered chiefly with trees and undergrowth." }
+      ]
+    },
+    {
+      position: 2,
+      content: "The villagers called it the Silent Forest, and they feared it with good reason.",
+      images: [],
+      audio_url: "",
+      translations: [
+        {
+          language: "es",
+          content: "Los aldeanos lo llamaban el Bosque Silencioso, y lo temían con buena razón."
+        },
+        {
+          language: "pt",
+          content: "Os aldeões o chamavam de Floresta Silenciosa, e o temiam com boas razões."
+        }
+      ],
+      vocabulary: [
+        { word: "villagers", definition: "People who live in a village." },
+        { word: "feared", definition: "Were afraid of something." }
       ]
     }
-  ]
+  ],
+  voices: []
 }

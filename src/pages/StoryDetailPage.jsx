@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { getStory, markStoryAsReviewed, getUserVocabulary, addUserVocabulary, deleteUserVocabulary } from '../api/stories'
+import { getStory, markStoryAsReviewed, getUserVocabulary, addUserVocabulary, deleteUserVocabulary, updateUserLanguage } from '../api/stories'
 
 // ── Theme definitions ────────────────────────────────────────────────────────
 const T = {
@@ -97,7 +97,7 @@ const FONT_DEFAULT = 20
 export default function StoryDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { token, user } = useAuth()
+  const { token, user, targetLanguage, setTargetLanguage } = useAuth()
   const [story, setStory] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -169,10 +169,23 @@ export default function StoryDetailPage() {
   useEffect(() => { currentVoiceRef.current = currentVoice }, [currentVoice])
 
   useEffect(() => {
+    setLoading(true)
+    setError('')
+    // Stop any playing audio when language changes
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.src = ''
+    }
+    setPlayingParaId(null)
+    setParaIsPlaying(false)
+    setActiveParagraphId(null)
+    setCurrentVoice(null)
+    setIsPlaying(false)
+
     async function load() {
       try {
         const [storyData, vocabData] = await Promise.all([
-          getStory(id, token),
+          getStory(id, token, targetLanguage),
           getUserVocabulary(id, token).catch(() => [])
         ])
         setStory(storyData)
@@ -185,7 +198,18 @@ export default function StoryDetailPage() {
       }
     }
     load()
-  }, [id, token])
+  }, [id, token, targetLanguage])
+
+  async function handleLanguageChange(lang) {
+    if (lang === targetLanguage) return
+    try {
+      await updateUserLanguage(lang, token)
+      setTargetLanguage(lang)
+      // Story reloads via the targetLanguage dependency in the effect above
+    } catch (err) {
+      console.error('Failed to update language:', err)
+    }
+  }
 
   // Handle text selection — works on both desktop (mouseup) and mobile (selectionchange)
   useEffect(() => {
@@ -256,13 +280,13 @@ export default function StoryDetailPage() {
     }
   }
 
+  const LANG_SPEECH_CODE = { en: 'en-US', pt: 'pt-BR' }
+
   function speak(text) {
     if (!window.speechSynthesis) return
-    // Cancel any ongoing speech
     window.speechSynthesis.cancel()
     const utterance = new SpeechSynthesisUtterance(text)
-    // Try to detect if it's English (you can make this dynamic if the story has a lang property)
-    utterance.lang = 'en-US' 
+    utterance.lang = LANG_SPEECH_CODE[targetLanguage] || 'en-US'
     window.speechSynthesis.speak(utterance)
   }
 
@@ -610,6 +634,22 @@ export default function StoryDetailPage() {
           <h1 className={`text-base font-bold truncate hidden sm:block ${c.navTitle}`}>{story.title}</h1>
 
           <div className="flex items-center gap-2">
+            {/* Language selector */}
+            <div className="flex items-center gap-1 rounded-xl border border-stone-200 p-0.5">
+              {[{ code: 'en', flag: '🇺🇸' }, { code: 'pt', flag: '🇧🇷' }].map(({ code, flag }) => (
+                <button
+                  key={code}
+                  onClick={() => handleLanguageChange(code)}
+                  title={code === 'en' ? 'English' : 'Português'}
+                  className={`w-8 h-8 flex items-center justify-center rounded-lg text-base transition-all ${
+                    targetLanguage === code ? c.chipActive : c.chip
+                  }`}
+                >
+                  {flag}
+                </button>
+              ))}
+            </div>
+
             {/* Minimal controls visible only on scroll or always in nav for simplicity */}
             <div className={`flex items-center gap-1 transition-all duration-500 ${isSticky ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'}`}>
               <button onClick={() => setShowTranslation(v => !v)} className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs border transition-all ${showTranslation ? c.chipActive : c.chip}`}>🌐</button>

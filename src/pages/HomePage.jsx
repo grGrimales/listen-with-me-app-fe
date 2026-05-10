@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { getStories, deleteStory, getPlaylists, addStoryToPlaylist, removeStoryFromPlaylist } from '../api/stories'
+import { getStories, deleteStory, getPlaylists, addStoryToPlaylist, removeStoryFromPlaylist, updateUserLanguage } from '../api/stories'
 
 const SORT_OPTIONS = [
   { value: 'least_reviewed', label: 'Least reviewed' },
@@ -116,7 +116,17 @@ function PlaylistCombobox({ playlists, selectedId, onChange }) {
 }
 
 export default function HomePage() {
-  const { user, token, logout } = useAuth()
+  const { user, token, logout, targetLanguage, setTargetLanguage } = useAuth()
+
+  async function handleLanguageChange(lang) {
+    if (lang === targetLanguage) return
+    try {
+      await updateUserLanguage(lang, token)
+      setTargetLanguage(lang)
+    } catch (err) {
+      console.error('Failed to update language:', err)
+    }
+  }
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const playlistId = searchParams.get('playlist_id')
@@ -415,6 +425,24 @@ export default function HomePage() {
             🧘 Zen Mode
           </Link>
 
+          {/* Language selector */}
+          <div className="flex items-center gap-1 rounded-xl border border-stone-200 p-0.5">
+            {[{ code: 'en', flag: '🇺🇸' }, { code: 'pt', flag: '🇧🇷' }].map(({ code, flag }) => (
+              <button
+                key={code}
+                onClick={() => handleLanguageChange(code)}
+                title={code === 'en' ? 'English' : 'Português'}
+                className={`w-8 h-8 flex items-center justify-center rounded-lg text-base transition-all ${
+                  targetLanguage === code
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-stone-400 hover:bg-stone-100'
+                }`}
+              >
+                {flag}
+              </button>
+            ))}
+          </div>
+
           {/* Divider */}
           <div className="w-px h-5 bg-stone-200 mx-1" />
 
@@ -478,6 +506,26 @@ export default function HomePage() {
                 className="flex items-center gap-3 px-4 py-3 text-sm font-semibold text-stone-800 hover:bg-stone-800 hover:text-emerald-400 transition">
                 🧘 Zen Mode
               </Link>
+              <div className="border-t border-stone-100 mx-3" />
+              {/* Language selector — mobile */}
+              <div className="px-4 py-3">
+                <p className="text-xs text-stone-400 mb-2">Target language</p>
+                <div className="flex gap-2">
+                  {[{ code: 'en', flag: '🇺🇸', label: 'English' }, { code: 'pt', flag: '🇧🇷', label: 'Português' }].map(({ code, flag, label }) => (
+                    <button
+                      key={code}
+                      onClick={() => { handleLanguageChange(code); setMobileMenuOpen(false) }}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                        targetLanguage === code
+                          ? 'bg-emerald-600 text-white border-emerald-600'
+                          : 'border-stone-200 text-stone-600'
+                      }`}
+                    >
+                      {flag} {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="border-t border-stone-100 mx-3" />
               <button onClick={() => { setMobileMenuOpen(false); handleLogout() }}
                 className="w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold text-stone-500 hover:bg-red-50 hover:text-red-600 transition">

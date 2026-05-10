@@ -48,7 +48,13 @@ export const getStories = (token, { playlistId, sortBy, limit = 12, offset = 0 }
   })
 }
 export const getDeletedStories = (token) => request('/api/admin/stories/trash-items', token)
-export const getStory = (id, token) => request(`/api/stories/${id}`, token)
+export const getStory = (id, token, lang) => {
+  const params = lang && lang !== 'en' ? `?lang=${lang}` : ''
+  return request(`/api/stories/${id}${params}`, token)
+}
+
+export const updateUserLanguage = (lang, token) =>
+  request('/api/user/language', token, { method: 'PUT', body: JSON.stringify({ language: lang }) })
 
 export const deleteStory = (id, token) => request(`/api/stories/${id}`, token, { method: 'DELETE' })
 export const restoreStory = (id, token) => request(`/api/stories/${id}/restore`, token, { method: 'POST' })

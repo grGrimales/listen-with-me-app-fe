@@ -12,10 +12,10 @@ async function request(path, token, options = {}) {
 export const getTTSVoices = (token) => request('/api/tts/voices', token)
 export const getTTSModels = (token) => request('/api/tts/models', token)
 
-export const generateParagraphAudio = (paragraphId, voiceId, modelId, token) =>
+export const generateParagraphAudio = (paragraphId, voiceId, modelId, token, language = 'en') =>
   request(`/api/paragraphs/${paragraphId}/audio/generate`, token, {
     method: 'POST',
-    body: JSON.stringify({ voice_id: voiceId, model_id: modelId }),
+    body: JSON.stringify({ voice_id: voiceId, model_id: modelId, language }),
   })
 
 export const getParagraphAudioHistory = (paragraphId, token) =>
