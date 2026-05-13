@@ -299,6 +299,71 @@ function PlayerScreen({ config, onEnd }) {
     }
   }, [config.infinite, onEnd])
 
+  // ── audio event handlers ───────────────────────────────────────────────────
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+
+    const onTime     = () => setCurrentTime(audio.currentTime)
+    const onDuration = () => setDuration(audio.duration || 0)
+    const onPlay     = () => setIsPlaying(true)
+    const onPause    = () => setIsPlaying(false)
+    const onEnded    = async () => {
+      // voice track = whole story in one file
+      if (detail?._voice) {
+        await logListen(queueRef.current[idxRef.current]?.id)
+        advanceStory()
+        return
+      }
+
+      // paragraph mode: advance to next paragraph and auto-play it
+      const nextPara = paraIdxRef.current + 1
+      if (nextPara < parasRef.current.length) {
+        const src = parasRef.current[nextPara].audio_url
+        paraIdxRef.current = nextPara
+        setParaIdx(nextPara)
+        // load & play next paragraph directly — don't go through useEffect
+        audio.src = src
+        audio.load()
+        await new Promise(resolve => setTimeout(resolve, 800))
+        audio.play().catch(e => { if (e.name !== 'AbortError') console.error(e) })
+      } else {
+        // all paragraphs done → log + advance to next story
+        await logListen(queueRef.current[idxRef.current]?.id)
+        advanceStory()
+      }
+    }
+
+    audio.addEventListener('timeupdate',     onTime)
+    audio.addEventListener('durationchange', onDuration)
+    audio.addEventListener('play',           onPlay)
+    audio.addEventListener('pause',          onPause)
+    audio.addEventListener('ended',          onEnded)
+    return () => {
+      audio.removeEventListener('timeupdate',     onTime)
+      audio.removeEventListener('durationchange', onDuration)
+      audio.removeEventListener('play',           onPlay)
+      audio.removeEventListener('pause',          onPause)
+      audio.removeEventListener('ended',          onEnded)
+    }
+  }, [detail, logListen, advanceStory])
+
+  // ── controls ───────────────────────────────────────────────────────────────
+
+  function togglePlay() {
+    const audio = audioRef.current
+    if (!audio || !audio.src) return
+    if (audio.paused) audio.play().catch(e => { if (e.name !== 'AbortError') console.error(e) })
+    else audio.pause()
+  }
+
+  function seek(e) {
+    if (!audioRef.current || !duration) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    audioRef.current.currentTime = ((e.clientX - rect.left) / rect.width) * duration
+  }
+
   // ── load queue on mount ────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -398,6 +463,14 @@ function PlayerScreen({ config, onEnd }) {
     }
   }, [detail])
 
+  function skipNext() {
+    advanceStory()
+  }
+
+  // ── derived display values ─────────────────────────────────────────────────
+
+  const metaStory   = queue[currentIdx] || null
+
   // ── Media Session API ──────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -432,78 +505,6 @@ function PlayerScreen({ config, onEnd }) {
     }
   }, [metaStory, detail, paraIdx, advanceStory])
 
-  // ── audio event handlers ───────────────────────────────────────────────────
-
-  useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-
-    const onTime     = () => setCurrentTime(audio.currentTime)
-    const onDuration = () => setDuration(audio.duration || 0)
-    const onPlay     = () => setIsPlaying(true)
-    const onPause    = () => setIsPlaying(false)
-    const onEnded    = async () => {
-      // voice track = whole story in one file
-      if (detail?._voice) {
-        await logListen(queueRef.current[idxRef.current]?.id)
-        advanceStory()
-        return
-      }
-
-      // paragraph mode: advance to next paragraph and auto-play it
-      const nextPara = paraIdxRef.current + 1
-      if (nextPara < parasRef.current.length) {
-        const src = parasRef.current[nextPara].audio_url
-        paraIdxRef.current = nextPara
-        setParaIdx(nextPara)
-        // load & play next paragraph directly — don't go through useEffect
-        audio.src = src
-        audio.load()
-        await new Promise(resolve => setTimeout(resolve, 800))
-        audio.play().catch(e => { if (e.name !== 'AbortError') console.error(e) })
-      } else {
-        // all paragraphs done → log + advance to next story
-        await logListen(queueRef.current[idxRef.current]?.id)
-        advanceStory()
-      }
-    }
-
-    audio.addEventListener('timeupdate',     onTime)
-    audio.addEventListener('durationchange', onDuration)
-    audio.addEventListener('play',           onPlay)
-    audio.addEventListener('pause',          onPause)
-    audio.addEventListener('ended',          onEnded)
-    return () => {
-      audio.removeEventListener('timeupdate',     onTime)
-      audio.removeEventListener('durationchange', onDuration)
-      audio.removeEventListener('play',           onPlay)
-      audio.removeEventListener('pause',          onPause)
-      audio.removeEventListener('ended',          onEnded)
-    }
-  }, [detail, logListen, advanceStory])
-
-  // ── controls ───────────────────────────────────────────────────────────────
-
-  function togglePlay() {
-    const audio = audioRef.current
-    if (!audio || !audio.src) return
-    if (audio.paused) audio.play().catch(e => { if (e.name !== 'AbortError') console.error(e) })
-    else audio.pause()
-  }
-
-  function seek(e) {
-    if (!audioRef.current || !duration) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    audioRef.current.currentTime = ((e.clientX - rect.left) / rect.width) * duration
-  }
-
-  function skipNext() {
-    advanceStory()
-  }
-
-  // ── derived display values ─────────────────────────────────────────────────
-
-  const metaStory   = queue[currentIdx] || null
   const progress    = duration ? (currentTime / duration) * 100 : 0
   const totalInQueue = config.infinite ? '∞' : queue.length
   const position    = currentIdx + 1
