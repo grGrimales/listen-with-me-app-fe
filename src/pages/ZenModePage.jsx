@@ -248,6 +248,7 @@ function PlayerScreen({ config, onEnd }) {
   const loggedRef     = useRef(new Set())
   const countRef      = useRef(0)
   const autoPlayRef   = useRef(false)   // true when advancing stories automatically
+  const preloadedDetailRef = useRef(null)
 
   // Rendered state (drives UI)
   const [queue, setQueueState]       = useState([])
@@ -326,7 +327,34 @@ function PlayerScreen({ config, onEnd }) {
   const currentStoryId = queue[currentIdx]?.id
 
   useEffect(() => {
+    const nextIdx = currentIdx + 1
+    const nextStory = queue[nextIdx]
+    if (!nextStory || !token) return
+    if (preloadedDetailRef.current?.id === nextStory.id) return
+
+    getStory(nextStory.id, token)
+      .then(full => {
+        const voice = full.voices?.[0]
+        const paras = voice ? [] : (full.paragraphs || []).filter(p => p.audio_url)
+        preloadedDetailRef.current = { ...full, _voice: voice, _paras: paras }
+      })
+      .catch(console.error)
+  }, [currentIdx, queue, token])
+
+  useEffect(() => {
     if (!currentStoryId) return
+
+    // Check preloader first
+    if (preloadedDetailRef.current?.id === currentStoryId) {
+      const p = preloadedDetailRef.current
+      setDetail(p)
+      setParaIdx(0)
+      paraIdxRef.current = 0
+      parasRef.current = p._paras
+      setLoadingDetail(false)
+      return
+    }
+
     setDetail(null)
     setParaIdx(0)
     paraIdxRef.current = 0
@@ -369,6 +397,40 @@ function PlayerScreen({ config, onEnd }) {
       }
     }
   }, [detail])
+
+  // ── Media Session API ──────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if ('mediaSession' in navigator && metaStory) {
+      const art = (detail?._voice
+        ? metaStory?.cover_url
+        : detail?._paras?.[paraIdx]?.images?.[0]?.image_url || metaStory?.cover_url) || '/favicon.svg'
+
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: metaStory.title,
+        artist: metaStory.author || 'Listen With Me',
+        album: `Level ${metaStory.level} · ${metaStory.category?.name || 'Story'}`,
+        artwork: [
+          { src: art, sizes: '512x512', type: 'image/png' }
+        ]
+      })
+
+      navigator.mediaSession.setActionHandler('play', () => {
+        audioRef.current?.play()
+      })
+      navigator.mediaSession.setActionHandler('pause', () => {
+        audioRef.current?.pause()
+      })
+      navigator.mediaSession.setActionHandler('nexttrack', () => {
+        advanceStory()
+      })
+      return () => {
+        navigator.mediaSession.setActionHandler('play', null)
+        navigator.mediaSession.setActionHandler('pause', null)
+        navigator.mediaSession.setActionHandler('nexttrack', null)
+      }
+    }
+  }, [metaStory, detail, paraIdx, advanceStory])
 
   // ── audio event handlers ───────────────────────────────────────────────────
 
