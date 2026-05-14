@@ -307,8 +307,14 @@ function PlayerScreen({ config, onEnd }) {
 
     const onTime     = () => setCurrentTime(audio.currentTime)
     const onDuration = () => setDuration(audio.duration || 0)
-    const onPlay     = () => setIsPlaying(true)
-    const onPause    = () => setIsPlaying(false)
+    const onPlay     = () => {
+      setIsPlaying(true)
+      if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'
+    }
+    const onPause    = () => {
+      setIsPlaying(false)
+      if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'
+    }
     const onEnded    = async () => {
       // voice track = whole story in one file
       if (detail?._voice) {
@@ -326,7 +332,9 @@ function PlayerScreen({ config, onEnd }) {
         // load & play next paragraph directly — don't go through useEffect
         audio.src = src
         audio.load()
-        await new Promise(resolve => setTimeout(resolve, 800))
+        // use minimal delay when screen is locked to avoid background timer throttling
+        const delay = document.visibilityState === 'hidden' ? 50 : 800
+        await new Promise(resolve => setTimeout(resolve, delay))
         audio.play().catch(e => { if (e.name !== 'AbortError') console.error(e) })
       } else {
         // all paragraphs done → log + advance to next story
@@ -348,6 +356,23 @@ function PlayerScreen({ config, onEnd }) {
       audio.removeEventListener('ended',          onEnded)
     }
   }, [detail, logListen, advanceStory])
+
+  // ── resume playback if OS paused audio on screen lock ─────────────────────
+
+  useEffect(() => {
+    let wasPlaying = false
+    function handleVisibilityChange() {
+      const audio = audioRef.current
+      if (!audio) return
+      if (document.visibilityState === 'hidden') {
+        wasPlaying = !audio.paused
+      } else if (document.visibilityState === 'visible' && wasPlaying && audio.paused && audio.src) {
+        audio.play().catch(e => { if (e.name !== 'AbortError') console.error(e) })
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [])
 
   // ── controls ───────────────────────────────────────────────────────────────
 
@@ -488,6 +513,7 @@ function PlayerScreen({ config, onEnd }) {
         ]
       })
 
+      navigator.mediaSession.playbackState = audioRef.current?.paused ? 'paused' : 'playing'
       navigator.mediaSession.setActionHandler('play', () => {
         audioRef.current?.play()
       })
