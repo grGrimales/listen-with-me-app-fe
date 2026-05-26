@@ -8,6 +8,7 @@ const SORT_OPTIONS = [
   { value: 'last_reviewed',  label: 'Last reviewed'  },
   { value: 'most_reviewed',  label: 'Most reviewed'  },
   { value: 'newest',         label: 'Newest'         },
+  { value: 'random',         label: 'Random'         },
 ]
 
 // Searchable playlist combobox
