@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { getStory, markStoryAsReviewed, getUserVocabulary, addUserVocabulary, deleteUserVocabulary, updateUserLanguage } from '../api/stories'
+import { getStory, markStoryAsReviewed, getUserVocabulary, addUserVocabulary, deleteUserVocabulary, reorderUserVocabulary, updateUserLanguage } from '../api/stories'
 
 // ── Theme definitions ────────────────────────────────────────────────────────
 const T = {
@@ -143,6 +143,9 @@ export default function StoryDetailPage() {
   const [selectedText, setSelectedText] = useState('')
   const [selectionBox, setSelectionBox] = useState(null)
 
+  // Tab state
+  const [activeTab, setActiveTab] = useState('read')
+
   // Paragraph-mode state
   const [playingParaId, setPlayingParaId] = useState(null)
   const [paraIsPlaying, setParaIsPlaying] = useState(false)
@@ -278,6 +281,19 @@ export default function StoryDetailPage() {
     } catch (err) {
       alert("Error deleting vocabulary: " + err.message)
     }
+  }
+
+  function handleMoveVocab(vocabId, direction) {
+    setUserVocab(prev => {
+      const idx = prev.findIndex(v => v.id === vocabId)
+      if (idx < 0) return prev
+      const newIdx = direction === 'up' ? idx - 1 : idx + 1
+      if (newIdx < 0 || newIdx >= prev.length) return prev
+      const next = [...prev]
+      ;[next[idx], next[newIdx]] = [next[newIdx], next[idx]]
+      reorderUserVocabulary(id, next.map(v => v.id), token).catch(console.error)
+      return next
+    })
   }
 
   const LANG_SPEECH_CODE = { en: 'en-US', pt: 'pt-BR' }
@@ -546,8 +562,8 @@ export default function StoryDetailPage() {
     <div className={`min-h-screen ${c.page} pb-36 transition-colors duration-300 relative`}>
       {isVoiceMode ? <audio ref={audioRef} src={currentVoice.audio_url} /> : <audio ref={audioRef} />}
 
-      {/* Desktop floating popup — hidden on mobile */}
-      {selectionBox && (
+      {/* Desktop floating popup — hidden on mobile, hidden in phrases tab (panel handles it) */}
+      {selectionBox && activeTab !== 'phrases' && (
         <div
           className="hidden sm:flex fixed z-[60] -translate-x-1/2 animate-in fade-in zoom-in duration-150 flex-col items-center"
           style={{ top: selectionBox.top, left: selectionBox.left }}
@@ -590,7 +606,7 @@ export default function StoryDetailPage() {
                 onClick={(e) => { e.stopPropagation(); handleAddVocab() }}
                 className="bg-emerald-600 active:bg-emerald-500 text-white text-sm font-bold px-4 py-2 rounded-xl transition-colors touch-manipulation select-none"
               >
-                + Save
+                {activeTab === 'phrases' ? '+ Add phrase' : '+ Save'}
               </button>
             </div>
           </div>
@@ -823,7 +839,32 @@ export default function StoryDetailPage() {
         </div>
       </div>
 
-      {/* Main Content Area */}
+      {/* Tab Bar */}
+      <div className={`border-b transition-colors duration-300 ${c.hero} sticky top-[61px] z-30`}>
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="flex">
+            {[
+              { key: 'read', label: 'Read' },
+              { key: 'phrases', label: `Phrases${userVocab.length > 0 ? ` (${userVocab.length})` : ''}` },
+            ].map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`px-5 py-3 text-sm font-bold border-b-2 transition-colors -mb-px ${
+                  activeTab === tab.key
+                    ? 'border-emerald-500 text-emerald-600'
+                    : `border-transparent ${c.heroSub} hover:text-stone-600`
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content Area — Read Tab */}
+      {activeTab === 'read' && (
       <div className={`max-w-7xl mx-auto px-6 grid grid-cols-1 ${showImages ? 'lg:grid-cols-2' : ''} gap-12 items-start`}>
         {/* Paragraphs Column */}
         <div className={showImages ? 'max-w-2xl' : 'max-w-3xl mx-auto w-full'}>
@@ -967,6 +1008,106 @@ export default function StoryDetailPage() {
           </div>
         )}
       </div>
+      )}
+
+      {/* Phrases Tab */}
+      {activeTab === 'phrases' && (
+        <div className="max-w-7xl mx-auto px-6 py-8 flex flex-col lg:flex-row gap-8 items-start">
+          {/* Story text — selectable */}
+          <div className="flex-1 min-w-0">
+            {story.paragraphs?.map((p, idx) => (
+              <div key={`phrase-para-${p.id}`} className="mb-12">
+                <div className="flex items-start gap-3">
+                  <span className={`font-mono text-sm flex-shrink-0 mt-1 ${c.paraNumIdle}`}>
+                    {(idx + 1).toString().padStart(2, '0')}
+                  </span>
+                  <p
+                    style={{ fontSize: `${fontSize}px` }}
+                    className={`flex-1 leading-relaxed font-serif select-text cursor-text ${c.paraText}`}
+                  >
+                    {p.content}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Phrases Panel */}
+          <div className="w-full lg:w-72 lg:sticky lg:top-28 flex-shrink-0">
+            <div className={`rounded-2xl border p-4 ${c.settingsPanel}`}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className={`font-bold text-sm uppercase tracking-wide ${c.settingsLabel}`}>Saved Phrases</h3>
+                {userVocab.length > 0 && (
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-bold border ${c.chip}`}>{userVocab.length}</span>
+                )}
+              </div>
+
+              {/* Selected text preview */}
+              {selectedText && (
+                <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+                  <p className="text-[10px] text-emerald-600 font-bold mb-1.5 uppercase tracking-wider">Selected</p>
+                  <p className="text-sm font-medium text-emerald-900 mb-3 italic leading-snug">"{selectedText}"</p>
+                  <button
+                    onPointerDown={e => e.preventDefault()}
+                    onClick={handleAddVocab}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-lg transition"
+                  >
+                    + Add phrase
+                  </button>
+                </div>
+              )}
+
+              {userVocab.length === 0 && !selectedText ? (
+                <p className={`text-sm text-center py-10 leading-relaxed ${c.heroSub}`}>
+                  Select text from the story to add phrases
+                </p>
+              ) : (
+                <ul className="space-y-1.5 max-h-[55vh] overflow-y-auto">
+                  {userVocab.map((v, idx) => (
+                    <li key={v.id} className={`flex items-center gap-2 px-2.5 py-2 rounded-xl border ${c.vocabChip}`}>
+                      <div className="flex flex-col gap-0.5 flex-shrink-0">
+                        <button
+                          onClick={() => handleMoveVocab(v.id, 'up')}
+                          disabled={idx === 0}
+                          className={`w-5 h-4 flex items-center justify-center rounded text-xs leading-none transition ${
+                            idx === 0 ? 'text-stone-300 cursor-default' : 'text-stone-400 hover:text-stone-700 hover:bg-stone-100'
+                          }`}
+                        >
+                          ▲
+                        </button>
+                        <button
+                          onClick={() => handleMoveVocab(v.id, 'down')}
+                          disabled={idx === userVocab.length - 1}
+                          className={`w-5 h-4 flex items-center justify-center rounded text-xs leading-none transition ${
+                            idx === userVocab.length - 1 ? 'text-stone-300 cursor-default' : 'text-stone-400 hover:text-stone-700 hover:bg-stone-100'
+                          }`}
+                        >
+                          ▼
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => speak(v.phrase)}
+                        className="flex-1 text-sm font-medium text-left truncate hover:text-emerald-600 transition"
+                        title={v.phrase}
+                      >
+                        {v.phrase}
+                      </button>
+                      <button
+                        onClick={() => handleDeleteVocab(v.id)}
+                        className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-lg text-stone-300 hover:text-red-500 hover:bg-red-50 transition"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Floating player — Voice mode */}
       {isVoiceMode && (

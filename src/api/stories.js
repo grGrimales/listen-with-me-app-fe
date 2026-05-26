@@ -142,6 +142,10 @@ export const addUserVocabulary = (storyId, phrase, token) => request(`/api/stori
   body: JSON.stringify({ phrase })
 })
 export const deleteUserVocabulary = (id, token) => request(`/api/stories/vocabulary/${id}`, token, { method: 'DELETE' })
+export const reorderUserVocabulary = (storyId, ids, token) => request(`/api/stories/${storyId}/vocabulary/reorder`, token, {
+  method: 'PATCH',
+  body: JSON.stringify({ ids })
+})
 
 // Zen Mode
 export const getZenStories = (token, { playlistId, limit, sort } = {}) => {
