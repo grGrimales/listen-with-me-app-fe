@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { getStory, markStoryAsReviewed, getUserVocabulary, addUserVocabulary, deleteUserVocabulary, reorderUserVocabulary, updateUserLanguage } from '../api/stories'
+import { getStory, markStoryAsReviewed, getUserVocabulary, addUserVocabulary, deleteUserVocabulary, reorderUserVocabulary, generateVocabAudio, updateUserLanguage } from '../api/stories'
 
 // ── Theme definitions ────────────────────────────────────────────────────────
 const T = {
@@ -300,12 +300,29 @@ export default function StoryDetailPage() {
 
   const LANG_SPEECH_CODE = { en: 'en-US', pt: 'pt-BR' }
 
-  function speak(text) {
+  function speakFallback(text) {
     if (!window.speechSynthesis) return
     window.speechSynthesis.cancel()
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.lang = LANG_SPEECH_CODE[targetLanguage] || 'en-US'
     window.speechSynthesis.speak(utterance)
+  }
+
+  // Keep speak() for non-vocab uses (selection popup, etc.)
+  function speak(text) { speakFallback(text) }
+
+  async function speakVocab(vocab) {
+    if (vocab.audio_url) {
+      new Audio(vocab.audio_url).play().catch(() => speakFallback(vocab.phrase))
+      return
+    }
+    try {
+      const { audio_url } = await generateVocabAudio(vocab.id, targetLanguage, token)
+      setUserVocab(prev => prev.map(v => v.id === vocab.id ? { ...v, audio_url } : v))
+      new Audio(audio_url).play().catch(() => speakFallback(vocab.phrase))
+    } catch {
+      speakFallback(vocab.phrase)
+    }
   }
 
   function renderHighlightedText(text) {
@@ -949,7 +966,7 @@ export default function StoryDetailPage() {
                     {vocabInPara.map((v) => (
                       <div key={`vocab-item-${v.id}`} className={`group flex items-center overflow-hidden rounded-xl text-sm border shadow-sm transition-all hover:border-emerald-300 ${c.vocabChip} border-emerald-100 bg-emerald-50/30`}>
                         <button 
-                          onClick={(e) => { e.stopPropagation(); speak(v.phrase) }}
+                          onClick={(e) => { e.stopPropagation(); speakVocab(v) }}
                           className="px-3 py-1.5 font-bold text-emerald-700 hover:bg-emerald-100/50 transition-colors flex items-center gap-2"
                         >
                           {v.phrase}
@@ -1112,7 +1129,7 @@ export default function StoryDetailPage() {
                         </button>
                       </div>
                       <button
-                        onClick={() => speak(v.phrase)}
+                        onClick={() => speakVocab(v)}
                         className="flex-1 text-sm font-medium text-left truncate hover:text-emerald-600 transition"
                         title={v.phrase}
                       >

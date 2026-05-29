@@ -146,6 +146,8 @@ export const reorderUserVocabulary = (storyId, ids, token) => request(`/api/stor
   method: 'PATCH',
   body: JSON.stringify({ ids })
 })
+export const generateVocabAudio = (vocabId, lang, token) =>
+  request(`/api/stories/vocabulary/${vocabId}/audio?lang=${lang}`, token, { method: 'POST' })
 
 // Zen Mode
 export const getZenStories = (token, { playlistId, limit, sort } = {}) => {
