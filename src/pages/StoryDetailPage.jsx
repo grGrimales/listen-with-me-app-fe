@@ -159,6 +159,8 @@ export default function StoryDetailPage() {
   const paraDelayRef = useRef(null)
   const paraRefs = useRef({})
 
+  const singlePlayRef = useRef(false)
+
   // Refs for audio event closures
   const playingParaIdRef = useRef(null)
   const isLoopingRef = useRef(false)
@@ -379,6 +381,10 @@ export default function StoryDetailPage() {
         }
       } else {
         setParaIsPlaying(false)
+        if (singlePlayRef.current) {
+          singlePlayRef.current = false
+          return
+        }
         const s = storyRef.current
         const currentId = playingParaIdRef.current
         if (!s || !currentId) return
@@ -462,6 +468,11 @@ export default function StoryDetailPage() {
     }
   }
   playParagraphRef.current = playParagraph
+
+  function playSingleParagraph(para) {
+    singlePlayRef.current = true
+    playParagraph(para)
+  }
 
   // Auto-scroll to active paragraph
   useEffect(() => {
@@ -893,19 +904,34 @@ export default function StoryDetailPage() {
                   </p>
 
                   {!isVoiceMode && p.audio_url && (
-                    <button
-                      onClick={() => toggleParagraph(p)}
-                      className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all ${
-                        isThisParaPlaying
-                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/20'
-                          : c.playBtn
-                      }`}
-                    >
-                      {isThisParaPlaying
-                        ? <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
-                        : <svg className="w-4 h-4 translate-x-px" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" /></svg>
-                      }
-                    </button>
+                    <div className="flex flex-col gap-1 flex-shrink-0">
+                      {/* Auto-advance play button */}
+                      <button
+                        onClick={() => toggleParagraph(p)}
+                        title="Play and continue"
+                        className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${
+                          isThisParaPlaying
+                            ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/20'
+                            : c.playBtn
+                        }`}
+                      >
+                        {isThisParaPlaying
+                          ? <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
+                          : <svg className="w-4 h-4 translate-x-px" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" /></svg>
+                        }
+                      </button>
+                      {/* Single-paragraph play button */}
+                      <button
+                        onClick={() => playSingleParagraph(p)}
+                        title="Play only this paragraph"
+                        className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all border ${c.playBtn}`}
+                      >
+                        <svg className="w-3.5 h-3.5 translate-x-px" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                        </svg>
+                        <span className="text-[9px] font-black leading-none -ml-0.5">1</span>
+                      </button>
+                    </div>
                   )}
                 </div>
 
