@@ -146,7 +146,9 @@ export default function PhrasePlaylistDetailPage() {
         break
     }
     setDeck(flat)
-  }, [playlist, groupFilterId, sortBy])
+    // Depend on `playlist?.groups` (not `playlist`) so incidental playlist mutations —
+    // toggling favorite, receiving updated metadata — don't reshuffle random/SRS decks.
+  }, [playlist?.groups, groupFilterId, sortBy])
 
   // Reset position only when the filter, sort, or playlist itself changes —
   // not when we just cache an audio URL on the current playlist.
@@ -323,15 +325,12 @@ export default function PhrasePlaylistDetailPage() {
     setPollyLoading(gender)
     try {
       const { audio_url } = await generatePollyAudio(current.id, gender, token)
-      setPlaylist(prev => ({
-        ...prev,
-        groups: prev.groups.map(g => ({
-          ...g,
-          phrases: g.phrases.map(p => p.id === current.id
-            ? { ...p, ...(gender === 'male' ? { polly_audio_url_male: audio_url } : { polly_audio_url_female: audio_url }) }
-            : p),
-        })),
-      }))
+      // Update the current phrase's URL directly on the deck. We deliberately don't
+      // touch `playlist` state — mutating it would trigger a deck rebuild that reshuffles
+      // random/SRS orderings, making the "next" phrase appear.
+      setDeck(prev => prev.map(p => p.id === current.id
+        ? { ...p, ...(gender === 'male' ? { polly_audio_url_male: audio_url } : { polly_audio_url_female: audio_url }) }
+        : p))
       playURL(audio_url)
     } catch (err) {
       alert(`Polly audio failed: ${err.message}`)
