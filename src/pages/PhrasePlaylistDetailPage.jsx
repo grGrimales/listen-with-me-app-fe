@@ -175,14 +175,17 @@ export default function PhrasePlaylistDetailPage() {
 
   useEffect(() => { setSelection('') }, [index, groupFilterId, sortBy])
 
-  // Build a memoized regex from vocab words (case-insensitive, longest first) — used to highlight matches in target text.
+  // Build a memoized regex from vocab words (case-insensitive, longest first).
+  // Uses Unicode word-boundary lookarounds so "table" doesn't match inside "comfortable",
+  // while still working with accented letters (á, ã, ç…) in Portuguese/Spanish.
   const vocabRegex = useMemo(() => {
     if (!showVocabHighlights || vocabWords.length === 0) return null
     const escape = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const sorted = [...vocabWords].sort((a, b) => b.text.length - a.text.length)
-    const pattern = sorted.map(w => escape(w.text)).join('|')
+    const pattern = sorted.map(w => escape(w.text)).filter(Boolean).join('|')
     if (!pattern) return null
-    return new RegExp(`(${pattern})`, 'gi')
+    // \p{L} = any Unicode letter, \p{N} = any Unicode number. Requires /u flag.
+    return new RegExp(`(?<![\\p{L}\\p{N}])(${pattern})(?![\\p{L}\\p{N}])`, 'giu')
   }, [showVocabHighlights, vocabWords])
 
   // Render text with saved-vocab matches wrapped in clickable highlighted spans.
