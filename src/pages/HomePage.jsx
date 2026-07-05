@@ -2,6 +2,154 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getStories, deleteStory, getPlaylists, addStoryToPlaylist, removeStoryFromPlaylist, updateUserLanguage } from '../api/stories'
+import { listPhrasePlaylists } from '../api/phrases'
+
+const LANG_LABELS = { en: 'English', pt: 'Português' }
+const LANG_FLAGS  = { en: '🇺🇸', pt: '🇧🇷' }
+
+function PhrasesDropdown() {
+  const { token } = useAuth()
+  const navigate = useNavigate()
+  const [open, setOpen] = useState(false)
+  const [playlists, setPlaylists] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [langFilter, setLangFilter] = useState('')
+  const [search, setSearch] = useState('')
+  const ref = useRef(null)
+
+  useEffect(() => {
+    function onOutside(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onOutside)
+    return () => document.removeEventListener('mousedown', onOutside)
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    setLoading(true)
+    listPhrasePlaylists(token, langFilter)
+      .then(setPlaylists)
+      .catch(err => console.error('Error loading phrase playlists:', err))
+      .finally(() => setLoading(false))
+  }, [open, langFilter, token])
+
+  const langsAvailable = Array.from(new Set(playlists.map(p => p.language)))
+  const filtered = playlists.filter(p =>
+    p.name.toLowerCase().includes(search.toLowerCase())
+  )
+
+  function pick(id) {
+    setOpen(false)
+    setSearch('')
+    navigate(`/phrases/${id}`)
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition flex items-center gap-1"
+      >
+        💬 Phrases
+        <svg className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-80 bg-white border border-stone-200 rounded-2xl shadow-xl z-30 overflow-hidden">
+          {/* Sub-tabs */}
+          <div className="grid grid-cols-3 border-b border-stone-100">
+            <Link
+              to="/phrases"
+              onClick={() => setOpen(false)}
+              className="flex items-center justify-center gap-1.5 px-3 py-3 text-xs sm:text-sm font-bold text-stone-700 hover:bg-emerald-50 hover:text-emerald-700 transition border-r border-stone-100"
+            >
+              💬 Playlists
+            </Link>
+            <Link
+              to="/phrases/stats"
+              onClick={() => setOpen(false)}
+              className="flex items-center justify-center gap-1.5 px-3 py-3 text-xs sm:text-sm font-bold text-stone-700 hover:bg-emerald-50 hover:text-emerald-700 transition border-r border-stone-100"
+            >
+              📊 Stats
+            </Link>
+            <Link
+              to="/phrases/import"
+              onClick={() => setOpen(false)}
+              className="flex items-center justify-center gap-1.5 px-3 py-3 text-xs sm:text-sm font-bold text-stone-700 hover:bg-emerald-50 hover:text-emerald-700 transition"
+            >
+              📥 Import
+            </Link>
+          </div>
+
+          <div className="px-4 pt-3 pb-1 text-[10px] text-stone-400 font-semibold uppercase tracking-wider">
+            Jump to a playlist
+          </div>
+
+          <div className="px-3 pb-2 space-y-2">
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search playlist..."
+              className="w-full border border-stone-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 transition"
+            />
+            <div className="flex gap-1.5 flex-wrap">
+              <button
+                onClick={() => setLangFilter('')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${langFilter === '' ? 'bg-emerald-600 text-white' : 'bg-stone-100 text-stone-500 hover:bg-stone-200'}`}
+              >
+                All
+              </button>
+              {['en', 'pt'].map(l => (
+                <button
+                  key={l}
+                  onClick={() => setLangFilter(l)}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition ${langFilter === l ? 'bg-emerald-600 text-white' : 'bg-stone-100 text-stone-500 hover:bg-stone-200'}`}
+                >
+                  {LANG_FLAGS[l]} {LANG_LABELS[l]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="max-h-64 overflow-y-auto py-1">
+            {loading ? (
+              <div className="flex justify-center py-6">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600"></div>
+              </div>
+            ) : filtered.length === 0 ? (
+              <p className="px-4 py-4 text-sm text-stone-400 text-center italic">
+                {search ? `No results for "${search}"` : 'No phrase playlists yet'}
+              </p>
+            ) : (
+              filtered.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => pick(p.id)}
+                  className={`w-full text-left px-4 py-2.5 hover:bg-stone-50 transition flex items-start gap-2.5 ${p.is_favorite ? 'bg-amber-50/40' : ''}`}
+                >
+                  <span className="text-lg flex-shrink-0 leading-tight">{LANG_FLAGS[p.language] || '🌐'}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-stone-800 truncate flex items-center gap-1.5">
+                      {p.is_favorite && <span className="text-amber-400">★</span>}
+                      {p.name}
+                    </p>
+                    <p className="text-[11px] text-stone-400">
+                      {p.group_count} {p.group_count === 1 ? 'group' : 'groups'} · {p.phrase_count} {p.phrase_count === 1 ? 'phrase' : 'phrases'}
+                    </p>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 const SORT_OPTIONS = [
   { value: 'least_reviewed', label: 'Least reviewed' },
@@ -425,6 +573,7 @@ export default function HomePage() {
           <Link to="/zen" className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition">
             🧘 Zen Mode
           </Link>
+          <PhrasesDropdown />
 
           {/* Language selector */}
           <div className="flex items-center gap-1 rounded-xl border border-stone-200 p-0.5">
@@ -506,6 +655,18 @@ export default function HomePage() {
               <Link to="/zen" onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center gap-3 px-4 py-3 text-sm font-semibold text-stone-800 hover:bg-stone-800 hover:text-emerald-400 transition">
                 🧘 Zen Mode
+              </Link>
+              <Link to="/phrases" onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-3 px-4 py-3 text-sm font-semibold text-stone-600 hover:bg-stone-50 transition">
+                💬 Phrases
+              </Link>
+              <Link to="/phrases/stats" onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-3 px-4 pl-10 py-2.5 text-xs font-semibold text-stone-500 hover:bg-stone-50 transition">
+                └ 📊 Phrase Stats
+              </Link>
+              <Link to="/phrases/import" onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-3 px-4 pl-10 py-2.5 text-xs font-semibold text-stone-500 hover:bg-stone-50 transition">
+                └ 📥 Import JSON
               </Link>
               <div className="border-t border-stone-100 mx-3" />
               {/* Language selector — mobile */}

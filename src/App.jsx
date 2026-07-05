@@ -13,6 +13,12 @@ import DeletedStoriesPage from './pages/DeletedStoriesPage'
 import StatsPage from './pages/StatsPage'
 import PlaylistsPage from './pages/PlaylistsPage'
 import ZenModePage from './pages/ZenModePage'
+import PhrasesPage from './pages/PhrasesPage'
+import PhrasePlaylistDetailPage from './pages/PhrasePlaylistDetailPage'
+import PhraseStatsPage from './pages/PhraseStatsPage'
+import PhraseImportPage from './pages/PhraseImportPage'
+import PhrasePlaylistManagePage from './pages/PhrasePlaylistManagePage'
+import PhraseVocabularyPage from './pages/PhraseVocabularyPage'
 
 export default function App() {
   return (
@@ -106,6 +112,54 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <ZenModePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/phrases"
+            element={
+              <ProtectedRoute>
+                <PhrasesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/phrases/stats"
+            element={
+              <ProtectedRoute>
+                <PhraseStatsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/phrases/import"
+            element={
+              <ProtectedRoute>
+                <PhraseImportPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/phrases/:id/manage"
+            element={
+              <ProtectedRoute>
+                <PhrasePlaylistManagePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/phrases/:id/vocabulary"
+            element={
+              <ProtectedRoute>
+                <PhraseVocabularyPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/phrases/:id"
+            element={
+              <ProtectedRoute>
+                <PhrasePlaylistDetailPage />
               </ProtectedRoute>
             }
           />
