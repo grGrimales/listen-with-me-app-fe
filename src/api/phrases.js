@@ -24,10 +24,6 @@ export function getPhrasePlaylist(id, token) {
   return request(`/api/phrase-playlists/${id}`, token)
 }
 
-export function seedDummyPhrasePlaylists(token) {
-  return request('/api/phrase-playlists/seed-dummy', token, { method: 'POST' })
-}
-
 export function importPhrasePlaylist(payload, token) {
   return request('/api/phrase-playlists/import', token, {
     method: 'POST',

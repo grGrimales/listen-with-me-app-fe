@@ -20,6 +20,8 @@ const SORT_OPTIONS = [
   { value: 'srs',            label: '🧠 Smart review (SRS)' },
 ]
 
+const SESSION_SIZES = [5, 10, 20, 30, 0] // 0 = All
+
 const DISPLAY_MODES = [
   { value: 'target',  label: '🌐 Target',  hint: 'Show phrase in target language' },
   { value: 'spanish', label: '🇪🇸 Spanish', hint: 'Show Spanish translation' },
@@ -59,6 +61,12 @@ export default function PhrasePlaylistDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [sortBy, setSortBy] = useState('playlist')
+  const [sessionSize, setSessionSize] = useState(() => {
+    try {
+      const v = localStorage.getItem('phrase.sessionSize')
+      return v ? Number(v) : 0 // 0 = all
+    } catch { return 0 }
+  })
   const [displayMode, setDisplayMode] = useState('audio')
   const [groupFilterId, setGroupFilterId] = useState(null)
   const [deck, setDeck] = useState([])
@@ -145,10 +153,11 @@ export default function PhrasePlaylistDetailPage() {
         // Already in group+position order from the API.
         break
     }
+    if (sessionSize && sessionSize > 0) flat = flat.slice(0, sessionSize)
     setDeck(flat)
     // Depend on `playlist?.groups` (not `playlist`) so incidental playlist mutations —
     // toggling favorite, receiving updated metadata — don't reshuffle random/SRS decks.
-  }, [playlist?.groups, groupFilterId, sortBy])
+  }, [playlist?.groups, groupFilterId, sortBy, sessionSize])
 
   // Reset position only when the filter, sort, or playlist itself changes —
   // not when we just cache an audio URL on the current playlist.
@@ -156,7 +165,11 @@ export default function PhrasePlaylistDetailPage() {
     setIndex(0)
     setRevealed(false)
     setLastRatingResult(null)
-  }, [groupFilterId, sortBy, playlist?.id])
+  }, [groupFilterId, sortBy, playlist?.id, sessionSize])
+
+  useEffect(() => {
+    try { localStorage.setItem('phrase.sessionSize', String(sessionSize)) } catch { /* noop */ }
+  }, [sessionSize])
 
   const current = deck[index]
   const hasPrev = index > 0
@@ -251,17 +264,21 @@ export default function PhrasePlaylistDetailPage() {
     setLastRatingResult(null)
   }, [hasPrev])
 
+  const isLast = deck.length > 0 && index === deck.length - 1
+
   const goNext = useCallback(() => {
-    if (!hasNext) return
-    if (current) {
-      logPhraseReview(current.id, token)
-        .then(() => setSessionReviews(n => n + 1))
-        .catch(err => console.error('logPhraseReview:', err))
+    if (!current) return
+    logPhraseReview(current.id, token)
+      .then(() => setSessionReviews(n => n + 1))
+      .catch(err => console.error('logPhraseReview:', err))
+    if (isLast) {
+      navigate('/phrases')
+      return
     }
     setIndex(i => i + 1)
     setRevealed(false)
     setLastRatingResult(null)
-  }, [hasNext, current, token])
+  }, [isLast, current, token, navigate])
 
   // SRS rating: also handles Again (push phrase back to end of local queue)
   const rate = useCallback(async (quality) => {
@@ -560,6 +577,18 @@ export default function PhrasePlaylistDetailPage() {
                   ))}
                 </select>
               </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[11px] text-stone-400 font-semibold uppercase tracking-wider mr-1">Session:</span>
+                {SESSION_SIZES.map(n => (
+                  <button
+                    key={n}
+                    onClick={() => setSessionSize(n)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition ${sessionSize === n ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-stone-500 border-stone-200 hover:border-emerald-400 hover:text-emerald-700'}`}
+                  >
+                    {n === 0 ? 'All' : n}
+                  </button>
+                ))}
+              </div>
               {isSRS && (
                 <span className="text-[11px] text-stone-400 italic">
                   Only phrases due for review are shown. Rate to schedule the next appearance.
@@ -787,13 +816,19 @@ export default function PhrasePlaylistDetailPage() {
                     </button>
                     <button
                       onClick={goNext}
-                      disabled={!hasNext}
-                      className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 py-3 rounded-2xl transition shadow-sm shadow-emerald-900/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                      disabled={!current}
+                      className={`flex items-center gap-2 text-white font-bold px-5 py-3 rounded-2xl transition shadow-sm disabled:opacity-40 disabled:cursor-not-allowed ${isLast ? 'bg-stone-800 hover:bg-stone-700 shadow-stone-900/20' : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/20'}`}
                     >
-                      Next
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" />
-                      </svg>
+                      {isLast ? 'Finalizar' : 'Next'}
+                      {isLast ? (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" />
+                        </svg>
+                      )}
                     </button>
                   </div>
                 )}

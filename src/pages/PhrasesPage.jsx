@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { listPhrasePlaylists, seedDummyPhrasePlaylists, setPhrasePlaylistFavorite } from '../api/phrases'
+import { listPhrasePlaylists, setPhrasePlaylistFavorite } from '../api/phrases'
 import PhrasePlaylistShareModal from '../components/PhrasePlaylistShareModal'
 
 const LANG_LABELS = { en: 'English', pt: 'Português' }
@@ -15,7 +15,6 @@ export default function PhrasesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [langFilter, setLangFilter] = useState('')
-  const [seeding, setSeeding] = useState(false)
   const [sharingPlaylist, setSharingPlaylist] = useState(null)
 
   useEffect(() => {
@@ -50,18 +49,6 @@ export default function PhrasesPage() {
     } catch (err) {
       setPlaylists(prev => prev.map(x => x.id === p.id ? { ...x, is_favorite: p.is_favorite } : x))
       alert(err.message)
-    }
-  }
-
-  async function handleSeed() {
-    setSeeding(true)
-    try {
-      await seedDummyPhrasePlaylists(token)
-      await load()
-    } catch (err) {
-      alert(err.message)
-    } finally {
-      setSeeding(false)
     }
   }
 
@@ -116,13 +103,6 @@ export default function PhrasesPage() {
             >
               📊 Stats
             </Link>
-            <button
-              onClick={handleSeed}
-              disabled={seeding}
-              className="text-xs font-bold text-stone-500 hover:text-emerald-700 border border-stone-200 hover:border-emerald-400 rounded-xl px-3 py-2 transition disabled:opacity-50"
-            >
-              {seeding ? 'Seeding…' : '+ Seed dummy data'}
-            </button>
           </div>
         </div>
 
