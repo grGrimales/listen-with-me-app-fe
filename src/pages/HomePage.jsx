@@ -84,6 +84,14 @@ function PhrasesDropdown() {
             </Link>
           </div>
 
+          <Link
+            to="/phrases/from-stories"
+            onClick={() => setOpen(false)}
+            className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-xs sm:text-sm font-bold text-stone-700 hover:bg-emerald-50 hover:text-emerald-700 transition border-b border-stone-100"
+          >
+            📖 From Stories
+          </Link>
+
           <div className="px-4 pt-3 pb-1 text-[10px] text-stone-400 font-semibold uppercase tracking-wider">
             Jump to a playlist
           </div>
@@ -667,6 +675,10 @@ export default function HomePage() {
               <Link to="/phrases/import" onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center gap-3 px-4 pl-10 py-2.5 text-xs font-semibold text-stone-500 hover:bg-stone-50 transition">
                 └ 📥 Import JSON
+              </Link>
+              <Link to="/phrases/from-stories" onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-3 px-4 pl-10 py-2.5 text-xs font-semibold text-stone-500 hover:bg-stone-50 transition">
+                └ 📖 From Stories
               </Link>
               <div className="border-t border-stone-100 mx-3" />
               {/* Language selector — mobile */}

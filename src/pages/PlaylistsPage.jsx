@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { getPlaylists, createPlaylist, updatePlaylist, deletePlaylist, setPlaylistFavorite } from '../api/stories'
+import { getPlaylists, createPlaylist, updatePlaylist, deletePlaylist, setPlaylistFavorite, storyPlaylistShareApi } from '../api/stories'
+import PhrasePlaylistShareModal from '../components/PhrasePlaylistShareModal'
 
 export default function PlaylistsPage() {
   const { token } = useAuth()
@@ -18,6 +19,8 @@ export default function PlaylistsPage() {
 
   // Delete modal state
   const [playlistToDelete, setPlaylistToDelete] = useState(null)
+  // Share modal state
+  const [sharingPlaylist, setSharingPlaylist] = useState(null)
 
   useEffect(() => {
     load()
@@ -213,46 +216,66 @@ export default function PlaylistsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {playlists.map(p => (
-              <div key={p.id} className={`bg-white rounded-[2rem] border p-6 shadow-sm hover:shadow-md transition-shadow flex flex-col group ${p.is_favorite ? 'border-amber-200 bg-amber-50/30' : 'border-stone-200'}`}>
+            {playlists.map(p => {
+              const isOwner = p.role === 'owner' || !p.role
+              return (
+              <div key={p.id} className={`bg-white rounded-[2rem] border p-6 shadow-sm hover:shadow-md transition-shadow flex flex-col group ${p.is_favorite ? 'border-amber-200 bg-amber-50/30' : isOwner ? 'border-stone-200' : 'border-sky-200 bg-sky-50/30'}`}>
                 <div className="flex-1 mb-6">
                   <div className="flex items-start justify-between mb-2">
-                    <button
-                      onClick={() => handleToggleFavorite(p)}
-                      title={p.is_favorite ? 'Remove from favorites' : 'Mark as favorite'}
-                      className="transition-transform active:scale-110"
-                    >
-                      {p.is_favorite
-                        ? <svg className="w-7 h-7 text-amber-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-                        : <svg className="w-7 h-7 text-stone-300 hover:text-amber-300" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-                      }
-                    </button>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {isOwner ? (
                       <button
-                        onClick={() => openEdit(p)}
-                        className="text-stone-300 hover:text-emerald-600 transition p-1"
-                        title="Edit name"
+                        onClick={() => handleToggleFavorite(p)}
+                        title={p.is_favorite ? 'Remove from favorites' : 'Mark as favorite'}
+                        className="transition-transform active:scale-110"
                       >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                        {p.is_favorite
+                          ? <svg className="w-7 h-7 text-amber-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                          : <svg className="w-7 h-7 text-stone-300 hover:text-amber-300" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                        }
                       </button>
-                      <button
-                        onClick={() => setPlaylistToDelete(p)}
-                        className="text-stone-300 hover:text-red-500 transition p-1"
-                        title="Delete playlist"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                      </button>
-                    </div>
+                    ) : (
+                      <span className="text-xs font-bold text-sky-700 bg-sky-100 px-2.5 py-1 rounded-full" title={`Shared by ${p.owner_name}`}>
+                        🤝 {p.role === 'editor' ? 'Editor' : 'Shared'}
+                      </span>
+                    )}
+                    {isOwner && (
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => setSharingPlaylist(p)}
+                          className="text-stone-300 hover:text-emerald-600 transition p-1"
+                          title="Share playlist"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                        </button>
+                        <button
+                          onClick={() => openEdit(p)}
+                          className="text-stone-300 hover:text-emerald-600 transition p-1"
+                          title="Edit name"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                        </button>
+                        <button
+                          onClick={() => setPlaylistToDelete(p)}
+                          className="text-stone-300 hover:text-red-500 transition p-1"
+                          title="Delete playlist"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <h4 className="text-xl font-bold text-stone-800 mb-1">{p.name}</h4>
                   <p className="text-sm text-stone-500 line-clamp-2">{p.description || 'No description'}</p>
+                  {!isOwner && (
+                    <p className="text-xs text-sky-600 mt-2 font-semibold">Shared by {p.owner_name}</p>
+                  )}
                 </div>
-                
+
                 <div className="flex items-center justify-between pt-4 border-t border-stone-100">
                   <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full uppercase tracking-tighter">
                     {p.story_count} {p.story_count === 1 ? 'story' : 'stories'}
                   </span>
-                  <Link 
+                  <Link
                     to={`/?playlist_id=${p.id}`}
                     className="text-xs font-bold text-stone-400 hover:text-stone-800 transition flex items-center gap-1"
                   >
@@ -260,10 +283,19 @@ export default function PlaylistsPage() {
                   </Link>
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </main>
+
+      {sharingPlaylist && (
+        <PhrasePlaylistShareModal
+          playlist={sharingPlaylist}
+          api={storyPlaylistShareApi}
+          onClose={() => setSharingPlaylist(null)}
+        />
+      )}
     </div>
   )
 }

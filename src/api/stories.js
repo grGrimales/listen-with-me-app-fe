@@ -78,6 +78,14 @@ export async function uploadVoiceAudio(storyId, name, file, token) {
   return data
 }
 
+// Generates a full-story voice via ElevenLabs, producing per-word timestamps
+// that enable Click-to-play. voiceId is the tts_voices UUID.
+export const generateStoryVoice = (storyId, { name, voiceId, modelId }, token) =>
+  request(`/api/stories/${storyId}/voices/generate-elevenlabs`, token, {
+    method: 'POST',
+    body: JSON.stringify({ name, voice_id: voiceId, model_id: modelId }),
+  })
+
 export async function uploadParagraphAudio(paragraphId, file, token) {
   const formData = new FormData()
   formData.append('file', file)
@@ -137,10 +145,42 @@ export const removeStoryFromPlaylist = (playlistId, storyId, token) =>
 
 // User Vocabulary
 export const getUserVocabulary = (storyId, token) => request(`/api/stories/${storyId}/vocabulary`, token)
-export const addUserVocabulary = (storyId, phrase, token) => request(`/api/stories/${storyId}/vocabulary`, token, {
+export const addUserVocabulary = (storyId, phrase, token, language = 'en') => request(`/api/stories/${storyId}/vocabulary`, token, {
   method: 'POST',
-  body: JSON.stringify({ phrase })
+  body: JSON.stringify({ phrase, language })
 })
+
+export const listStoryPhrasePlaylists = (token) => request('/api/story-phrase-playlists', token)
+
+// --- Story playlist sharing ---
+export const listPlaylistShares = (playlistId, token) =>
+  request(`/api/playlists/${playlistId}/shares`, token)
+
+export const searchShareCandidates = (playlistId, q, token) =>
+  request(`/api/playlists/${playlistId}/share-candidates?q=${encodeURIComponent(q)}`, token)
+
+export const addPlaylistShare = (playlistId, email, permission, token) =>
+  request(`/api/playlists/${playlistId}/shares`, token, {
+    method: 'POST',
+    body: JSON.stringify({ email, permission }),
+  })
+
+export const updatePlaylistShare = (playlistId, userId, permission, token) =>
+  request(`/api/playlists/${playlistId}/shares/${userId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify({ permission }),
+  })
+
+export const removePlaylistShare = (playlistId, userId, token) =>
+  request(`/api/playlists/${playlistId}/shares/${userId}`, token, { method: 'DELETE' })
+
+export const storyPlaylistShareApi = {
+  listPlaylistShares,
+  addPlaylistShare,
+  updatePlaylistShare,
+  removePlaylistShare,
+  searchShareCandidates,
+}
 export const deleteUserVocabulary = (id, token) => request(`/api/stories/vocabulary/${id}`, token, { method: 'DELETE' })
 export const reorderUserVocabulary = (storyId, ids, token) => request(`/api/stories/${storyId}/vocabulary/reorder`, token, {
   method: 'PATCH',

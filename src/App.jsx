@@ -19,6 +19,7 @@ import PhraseStatsPage from './pages/PhraseStatsPage'
 import PhraseImportPage from './pages/PhraseImportPage'
 import PhrasePlaylistManagePage from './pages/PhrasePlaylistManagePage'
 import PhraseVocabularyPage from './pages/PhraseVocabularyPage'
+import StoryPhrasePlaylistsPage from './pages/StoryPhrasePlaylistsPage'
 
 export default function App() {
   return (
@@ -136,6 +137,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <PhraseImportPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/phrases/from-stories"
+            element={
+              <ProtectedRoute>
+                <StoryPhrasePlaylistsPage />
               </ProtectedRoute>
             }
           />

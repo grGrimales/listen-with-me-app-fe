@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
-import {
-  listPlaylistShares,
-  addPlaylistShare,
-  updatePlaylistShare,
-  removePlaylistShare,
-  searchShareCandidates,
-} from '../api/phrases'
+import * as phrasesApi from '../api/phrases'
 
-export default function PhrasePlaylistShareModal({ playlist, onClose }) {
+// Generic share modal. `api` supplies the five share functions; defaults to the
+// phrase-playlist API so existing callers keep working. Story playlists pass their own.
+export default function PhrasePlaylistShareModal({ playlist, onClose, api }) {
+  const {
+    listPlaylistShares = phrasesApi.listPlaylistShares,
+    addPlaylistShare = phrasesApi.addPlaylistShare,
+    updatePlaylistShare = phrasesApi.updatePlaylistShare,
+    removePlaylistShare = phrasesApi.removePlaylistShare,
+    searchShareCandidates = phrasesApi.searchShareCandidates,
+  } = api || {}
   const { token } = useAuth()
   const [shares, setShares] = useState([])
   const [loading, setLoading] = useState(true)

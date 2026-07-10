@@ -143,7 +143,13 @@ export default function AssetsManagerPage() {
 
         {/* Paragraphs — image + audio per paragraph */}
         <section>
-          <h2 className="text-xl font-bold text-stone-800 mb-4">Paragraphs</h2>
+          <div className="mb-4">
+            <h2 className="text-xl font-bold text-stone-800">Paragraphs</h2>
+            <p className="text-sm text-stone-500">
+              Generating a paragraph's English audio also saves 🎯 word timestamps, enabling
+              click-to-play in the reader.
+            </p>
+          </div>
           <div className="space-y-6">
             {story.paragraphs.map((p, i) => (
               <ParagraphAssetCard

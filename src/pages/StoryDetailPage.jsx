@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { getStory, markStoryAsReviewed, getUserVocabulary, addUserVocabulary, deleteUserVocabulary, reorderUserVocabulary, generateVocabAudio, updateUserLanguage } from '../api/stories'
+import { getStory, markStoryAsReviewed, getUserVocabulary, addUserVocabulary, deleteUserVocabulary, reorderUserVocabulary, updateUserLanguage } from '../api/stories'
 
 // ── Theme definitions ────────────────────────────────────────────────────────
 const T = {
@@ -106,6 +106,7 @@ export default function StoryDetailPage() {
   const [showTranslation, setShowTranslation] = useState(false)
   const [showVocabulary, setShowVocabulary] = useState(false)
   const [showImages, setShowImages] = useState(() => localStorage.getItem('rwm_showImages') !== 'false')
+  const [wordClickMode, setWordClickMode] = useState(() => localStorage.getItem('rwm_wordClickMode') === 'true')
   const [theme, setTheme] = useState(() => localStorage.getItem('rwm_theme') || 'light')
   const [fontSize, setFontSize] = useState(() => Number(localStorage.getItem('rwm_fontSize')) || FONT_DEFAULT)
   const [showSettings, setShowSettings] = useState(false)
@@ -128,6 +129,7 @@ export default function StoryDetailPage() {
   useEffect(() => { localStorage.setItem('rwm_theme', theme) }, [theme])
   useEffect(() => { localStorage.setItem('rwm_fontSize', fontSize) }, [fontSize])
   useEffect(() => { localStorage.setItem('rwm_showImages', showImages) }, [showImages])
+  useEffect(() => { localStorage.setItem('rwm_wordClickMode', wordClickMode) }, [wordClickMode])
 
   // Voice-mode state
   const [currentVoice, setCurrentVoice] = useState(null)
@@ -158,6 +160,8 @@ export default function StoryDetailPage() {
   const selectionTimerRef = useRef(null)
   const paraDelayRef = useRef(null)
   const paraRefs = useRef({})
+  const vocabAudioRef = useRef(null)
+  const vocabStopRef = useRef(null)
 
   const singlePlayRef = useRef(false)
 
@@ -261,7 +265,7 @@ export default function StoryDetailPage() {
     const textToSave = selectedText
     const tempId = Date.now() // Stable temp key
     try {
-      const newItem = await addUserVocabulary(id, textToSave, token)
+      const newItem = await addUserVocabulary(id, textToSave, token, targetLanguage)
       const vocabToAdd = {
         ...newItem,
         id: newItem.id || tempId, // Use real ID if available, else temp
@@ -271,8 +275,13 @@ export default function StoryDetailPage() {
       setSelectedText('')
       setSelectionBox(null)
       window.getSelection().removeAllRanges()
+      // Soft, non-blocking note when the word was added to word playlists but has no
+      // story audio yet (the paragraph audio hasn't been generated).
+      if (newItem.added_to_playlists > 0 && newItem.audio_missing) {
+        alert('Guardado. Genera el audio de este párrafo para poder reproducir esta palabra en tus playlists de palabras.')
+      }
     } catch (err) {
-      alert("Error saving vocabulary: " + err.message)
+      alert(err.message)
     }
   }
 
@@ -311,18 +320,141 @@ export default function StoryDetailPage() {
   // Keep speak() for non-vocab uses (selection popup, etc.)
   function speak(text) { speakFallback(text) }
 
-  async function speakVocab(vocab) {
+  // Locates a saved phrase inside the story's paragraphs using the per-word
+  // timestamps, returning the paragraph and the [start, end] ms of the phrase.
+  // Punctuation is ignored when matching. Returns null if not found.
+  function findVocabSegment(phrase) {
+    if (!story?.paragraphs) return null
+    const norm = s => (s || '').toLowerCase().replace(/[^\p{L}\p{N}']/gu, '')
+    const tokens = phrase.trim().split(/\s+/).map(norm).filter(Boolean)
+    if (tokens.length === 0) return null
+    for (const p of story.paragraphs) {
+      const words = p.word_timestamps
+      if (!p.audio_url || !words?.length) continue
+      for (let i = 0; i + tokens.length <= words.length; i++) {
+        let ok = true
+        for (let j = 0; j < tokens.length; j++) {
+          if (norm(words[i + j].word) !== tokens[j]) { ok = false; break }
+        }
+        if (ok) return { para: p, startMs: words[i].start_ms, endMs: words[i + tokens.length - 1].end_ms }
+      }
+    }
+    return null
+  }
+
+  function stopVocabSegment() {
+    const a = vocabAudioRef.current
+    if (a) a.pause()
+    if (vocabStopRef.current) {
+      cancelAnimationFrame(vocabStopRef.current)
+      vocabStopRef.current = null
+    }
+  }
+
+  // Plays only [startMs, endMs] of a paragraph's own audio, on a dedicated audio
+  // element so it doesn't disturb the main narration player. Uses requestAnimationFrame
+  // (~16ms precision) to stop right at endMs — timeupdate (~250ms) would bleed into
+  // the next word.
+  function playVocabSegment(para, startMs, endMs) {
+    if (!vocabAudioRef.current) vocabAudioRef.current = new Audio()
+    const a = vocabAudioRef.current
+    // Avoid overlapping with the main narration.
+    if (audioRef.current && !audioRef.current.paused) audioRef.current.pause()
+    stopVocabSegment()
+
+    const startAndBound = () => {
+      try { a.currentTime = startMs / 1000 } catch { /* ignore */ }
+      const endSec = endMs / 1000
+      const tick = () => {
+        if (a.paused) { vocabStopRef.current = null; return }
+        if (a.currentTime >= endSec) {
+          a.pause()
+          vocabStopRef.current = null
+          return
+        }
+        vocabStopRef.current = requestAnimationFrame(tick)
+      }
+      a.play()
+        .then(() => { vocabStopRef.current = requestAnimationFrame(tick) })
+        .catch(err => { if (err && err.name !== 'AbortError') console.error('vocab segment play failed', err) })
+    }
+
+    if (a.src !== para.audio_url) {
+      a.src = para.audio_url
+      const onReady = () => { a.removeEventListener('loadedmetadata', onReady); startAndBound() }
+      a.addEventListener('loadedmetadata', onReady)
+      a.load()
+    } else {
+      startAndBound()
+    }
+  }
+
+  // Plays a saved phrase by reusing the story audio segment. Falls back to any
+  // cached audio, then browser TTS, when the phrase can't be located in the audio.
+  function speakVocab(vocab) {
+    const seg = findVocabSegment(vocab.phrase)
+    if (seg) { playVocabSegment(seg.para, seg.startMs, seg.endMs); return }
     if (vocab.audio_url) {
       new Audio(vocab.audio_url).play().catch(() => speakFallback(vocab.phrase))
       return
     }
-    try {
-      const { audio_url } = await generateVocabAudio(vocab.id, targetLanguage, token)
-      setUserVocab(prev => prev.map(v => v.id === vocab.id ? { ...v, audio_url } : v))
-      new Audio(audio_url).play().catch(() => speakFallback(vocab.phrase))
-    } catch {
-      speakFallback(vocab.phrase)
+    speakFallback(vocab.phrase)
+  }
+
+  function seekVoiceToMs(startMs) {
+    if (!isVoiceMode || !audioRef.current) return
+    audioRef.current.currentTime = Math.max(0, startMs / 1000)
+    const playPromise = audioRef.current.play()
+    if (playPromise !== undefined) {
+      playPromise.then(() => setIsPlaying(true)).catch(err => {
+        if (err && err.name !== 'AbortError') console.error("Word seek-play failed:", err)
+        setIsPlaying(false)
+      })
     }
+  }
+
+  // Renders a paragraph as clickable word spans (Click-to-play mode). Preserves the
+  // original text (incl. punctuation) by rebuilding from source characters.
+  // - Voice mode: click seeks the whole-story audio to the word's start_ms.
+  // - Paragraph mode: click plays THIS paragraph's audio from the word's start_ms.
+  function renderClickableWords(p) {
+    const words = isVoiceMode ? (voiceWordMap.get(p.id) || []) : (p.word_timestamps || [])
+    if (words.length === 0) return renderHighlightedText(p.content)
+
+    const text = p.content
+    const onWord = (startMs) => (e) => {
+      e.stopPropagation()
+      // If the user is highlighting text (to save vocab), don't hijack the click.
+      if (window.getSelection()?.toString().trim()) return
+      if (isVoiceMode) seekVoiceToMs(startMs)
+      else playParagraphFromMs(p, startMs)
+    }
+
+    const nodes = []
+    let searchFrom = 0
+    words.forEach((w, wi) => {
+      const idx = text.toLowerCase().indexOf(w.word.toLowerCase(), searchFrom)
+      if (idx < 0) return // mismatch between source and alignment — skip cleanly
+      if (idx > searchFrom) {
+        nodes.push(<span key={`gap-${wi}`}>{text.slice(searchFrom, idx)}</span>)
+      }
+      const original = text.slice(idx, idx + w.word.length)
+      nodes.push(
+        <span
+          key={`w-${wi}`}
+          onClick={onWord(w.start_ms)}
+          className="cursor-pointer rounded px-0.5 hover:bg-emerald-100 hover:text-emerald-900 transition-colors"
+          title={`Jump to ${(w.start_ms/1000).toFixed(1)}s`}
+        >
+          {original}
+        </span>
+      )
+      searchFrom = idx + w.word.length
+    })
+    if (searchFrom < text.length) {
+      nodes.push(<span key="tail">{text.slice(searchFrom)}</span>)
+    }
+    return nodes
   }
 
   function renderHighlightedText(text) {
@@ -332,14 +464,14 @@ export default function StoryDetailPage() {
     const sortedVocab = [...userVocab].sort((a, b) => b.phrase.length - a.phrase.length)
     const phrases = sortedVocab.map(v => v.phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
     const pattern = new RegExp(`(\\b(?:${phrases.join('|')})\\b)`, 'gi')
-    
+
     const parts = text.split(pattern)
     return parts.map((part, i) => {
       const isMatch = sortedVocab.some(v => v.phrase.toLowerCase() === part.toLowerCase())
       if (isMatch) {
         return (
-          <span 
-            key={i} 
+          <span
+            key={i}
             onClick={(e) => { e.stopPropagation(); speak(part) }}
             className="cursor-pointer bg-emerald-100/80 text-emerald-900 px-0.5 rounded border-b-2 border-emerald-400 font-bold transition-all hover:bg-emerald-200"
             title="Click to hear pronunciation"
@@ -486,6 +618,44 @@ export default function StoryDetailPage() {
   }
   playParagraphRef.current = playParagraph
 
+  // Plays a paragraph's own audio starting at a given ms offset (Click-to-play word).
+  // If the paragraph's audio isn't loaded yet, waits for metadata before seeking.
+  function playParagraphFromMs(para, ms) {
+    if (!audioRef.current || !para.audio_url) return
+    const audio = audioRef.current
+    const target = Math.max(0, ms / 1000)
+
+    const seekAndPlay = () => {
+      try { audio.currentTime = target } catch { /* ignore */ }
+      const playPromise = audio.play()
+      if (playPromise !== undefined) {
+        playPromise.then(() => setParaIsPlaying(true)).catch(err => {
+          if (err && err.name !== 'AbortError') console.error("Word play failed:", err)
+          setParaIsPlaying(false)
+        })
+      }
+    }
+
+    const alreadyLoaded = playingParaIdRef.current === para.id && audio.src && audio.readyState >= 1
+    if (alreadyLoaded) {
+      seekAndPlay()
+      return
+    }
+
+    audio.pause()
+    audio.src = para.audio_url
+    setPlayingParaId(para.id)
+    setParaCurrentTime(0)
+    setActiveParagraphId(para.id)
+
+    const onReady = () => {
+      audio.removeEventListener('loadedmetadata', onReady)
+      seekAndPlay()
+    }
+    audio.addEventListener('loadedmetadata', onReady)
+    audio.load()
+  }
+
   function playSingleParagraph(para) {
     singlePlayRef.current = true
     playParagraph(para)
@@ -547,6 +717,24 @@ export default function StoryDetailPage() {
   const hasParagraphAudio = story?.paragraphs?.some(p => p.audio_url)
   const playingPara = story?.paragraphs?.find(p => p.id === playingParaId)
   const c = T[theme]
+
+  // Whole-story voice word map (used only in voice mode): paragraph_id -> words.
+  const voiceWordMap = useMemo(() => {
+    const map = new Map()
+    const words = currentVoice?.word_timestamps || []
+    for (const w of words) {
+      const arr = map.get(w.paragraph_id)
+      if (arr) arr.push(w)
+      else map.set(w.paragraph_id, [w])
+    }
+    return map
+  }, [currentVoice])
+
+  // Per-paragraph word timestamps (the incremental, per-paragraph audio flow).
+  const paraHasWords = !!story?.paragraphs?.some(p => p.word_timestamps?.length > 0)
+  const voiceHasWords = voiceWordMap.size > 0
+  const hasWordTimestamps = isVoiceMode ? voiceHasWords : paraHasWords
+  const wordClickActive = wordClickMode && hasWordTimestamps
 
   // Logic to determine which image to show
   // Default to first paragraph if no active paragraph yet
@@ -699,6 +887,9 @@ export default function StoryDetailPage() {
               <button onClick={() => setShowTranslation(v => !v)} className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs border transition-all ${showTranslation ? c.chipActive : c.chip}`}>🌐</button>
               <button onClick={() => setShowVocabulary(v => !v)} className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs border transition-all ${showVocabulary ? c.chipActive : c.chip}`}>📖</button>
               <button onClick={() => setShowImages(v => !v)} className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs border transition-all ${showImages ? c.chipActive : c.chip}`}>🖼️</button>
+              {hasWordTimestamps && (
+                <button onClick={() => setWordClickMode(v => !v)} title="Click a word to jump audio" className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs border transition-all ${wordClickMode ? c.chipActive : c.chip}`}>🎯</button>
+              )}
               <button onClick={() => setIsLooping(v => !v)} className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs border transition-all ${isLooping ? 'bg-amber-500 text-white border-amber-500' : c.chip}`}>🔁</button>
               <div className="w-px h-4 bg-stone-200 mx-1" />
             </div>
@@ -802,6 +993,17 @@ export default function StoryDetailPage() {
             >
               🖼️ Images
             </button>
+            {hasWordTimestamps && (
+              <button
+                onClick={() => setWordClickMode(v => !v)}
+                title="Click any word to jump the audio to that point"
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
+                  wordClickMode ? c.chipActive : c.chip
+                }`}
+              >
+                🎯 Click-to-play
+              </button>
+            )}
             <Link
               to={`/stories/${id}/evaluation`}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${c.chip} hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200`}
@@ -913,11 +1115,11 @@ export default function StoryDetailPage() {
                   </span>
 
                   <p
-                    onClick={() => isVoiceMode && handleParagraphClick(p.id)}
+                    onClick={() => !wordClickActive && isVoiceMode && handleParagraphClick(p.id)}
                     style={{ fontSize: `${fontSize}px` }}
-                    className={`flex-1 leading-relaxed font-serif transition-colors duration-300 ${isVoiceMode ? 'cursor-pointer' : ''} ${isActive ? c.paraTextActive : c.paraText}`}
+                    className={`flex-1 leading-relaxed font-serif transition-colors duration-300 ${isVoiceMode && !wordClickActive ? 'cursor-pointer' : ''} ${isActive ? c.paraTextActive : c.paraText}`}
                   >
-                    {renderHighlightedText(p.content)}
+                    {wordClickActive ? renderClickableWords(p) : renderHighlightedText(p.content)}
                   </p>
 
                   {!isVoiceMode && p.audio_url && (

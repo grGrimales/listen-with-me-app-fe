@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getPhrasePlaylist, logPhraseReview, ratePhrase, setPhrasePlaylistFavorite, generatePollyAudio, addPhraseVocabulary, getPhraseVocabularyInfo } from '../api/phrases'
@@ -311,7 +311,9 @@ export default function PhrasePlaylistDetailPage() {
   }, [current, index, token])
 
   // Stop any in-flight audio when phrase / filter / sort changes or the page unmounts
+  const segStopRef = useRef(null)
   const stopAudio = useCallback(() => {
+    if (segStopRef.current) { cancelAnimationFrame(segStopRef.current); segStopRef.current = null }
     setCurrentAudio(prev => {
       if (prev) { try { prev.pause() } catch { /* noop */ } }
       return null
@@ -359,6 +361,46 @@ export default function PhrasePlaylistDetailPage() {
     }
   }, [current, token, stopAudio])
 
+  // Play the story-audio segment for a story-linked phrase: reuses the story's own
+  // audio, playing only [source_start_ms, source_end_ms]. Stops precisely via rAF.
+  const playStorySegment = useCallback(() => {
+    if (!current || !current.source_audio_url) return
+    stopAudio()
+    const audio = new Audio(current.source_audio_url)
+    const startSec = (current.source_start_ms || 0) / 1000
+    const endSec = (current.source_end_ms || 0) / 1000
+    setCurrentAudio(audio)
+
+    const tick = () => {
+      if (audio.paused) { segStopRef.current = null; return }
+      if (endSec > 0 && audio.currentTime >= endSec) {
+        audio.pause()
+        setPollyPlaying(null)
+        setCurrentAudio(null)
+        segStopRef.current = null
+        return
+      }
+      segStopRef.current = requestAnimationFrame(tick)
+    }
+
+    const startAndBound = () => {
+      try { audio.currentTime = startSec } catch { /* ignore */ }
+      audio.play().then(() => {
+        setPollyPlaying('story')
+        segStopRef.current = requestAnimationFrame(tick)
+      }).catch(err => {
+        if (err && err.name !== 'AbortError') console.error('Story segment playback:', err)
+        setPollyPlaying(null)
+        setCurrentAudio(null)
+      })
+    }
+
+    audio.onended = () => { setPollyPlaying(null); setCurrentAudio(null) }
+    audio.onerror = () => { setPollyPlaying(null); setCurrentAudio(null) }
+    if (audio.readyState >= 1) startAndBound()
+    else audio.addEventListener('loadedmetadata', startAndBound, { once: true })
+  }, [current, stopAudio])
+
   // Play a saved vocab word's audio. Doesn't log a review — pure playback.
   const playVocabWord = useCallback(async (word, gender = 'female') => {
     if (!word) return
@@ -397,12 +439,16 @@ export default function PhrasePlaylistDetailPage() {
         else if (e.key === 'ArrowLeft') goPrev()
       }
       if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); setRevealed(r => !r) }
+      else if (current?.source_audio_url) {
+        // Story-linked phrase: F/M/P all play the single story-audio segment (no Polly).
+        if (['f', 'm', 'p'].includes(e.key.toLowerCase())) playStorySegment()
+      }
       else if (e.key.toLowerCase() === 'f' && current) { playPollyVoice('female') }
       else if (e.key.toLowerCase() === 'm' && current) { playPollyVoice('male') }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [goNext, goPrev, rate, playPollyVoice, current, isSRS])
+  }, [goNext, goPrev, rate, playPollyVoice, playStorySegment, current, isSRS])
 
   function handleLogout() {
     logout()
@@ -697,7 +743,20 @@ export default function PhrasePlaylistDetailPage() {
                     </div>
                   )}
 
-                  {/* Two Polly voices — female + male — with per-language voice names */}
+                  {/* Story-linked phrase: single audio = the story's own narration segment */}
+                  {current.source_audio_url ? (
+                    <div className="flex flex-col items-center gap-1 mb-6">
+                      <button
+                        onClick={playStorySegment}
+                        title="Play the story audio"
+                        className={`w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-sm border-2 active:scale-95 ${pollyPlaying === 'story' ? 'bg-emerald-600 border-emerald-600 text-white animate-pulse' : 'bg-white border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-400'}`}
+                      >
+                        <span className="text-2xl">🎧</span>
+                      </button>
+                      <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Story audio</span>
+                    </div>
+                  ) : (
+                  /* Two Polly voices — female + male — with per-language voice names */
                   <div className="flex items-center gap-6 mb-6">
                     {['female', 'male'].map(gender => {
                       const cached = gender === 'male' ? current.polly_audio_url_male : current.polly_audio_url_female
@@ -736,6 +795,7 @@ export default function PhrasePlaylistDetailPage() {
                       )
                     })}
                   </div>
+                  )}
 
                   {/* Back: reveal the pieces NOT shown on the front */}
                   {revealed ? (
