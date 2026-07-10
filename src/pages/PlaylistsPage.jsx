@@ -222,7 +222,7 @@ export default function PlaylistsPage() {
               <div key={p.id} className={`bg-white rounded-[2rem] border p-6 shadow-sm hover:shadow-md transition-shadow flex flex-col group ${p.is_favorite ? 'border-amber-200 bg-amber-50/30' : isOwner ? 'border-stone-200' : 'border-sky-200 bg-sky-50/30'}`}>
                 <div className="flex-1 mb-6">
                   <div className="flex items-start justify-between mb-2">
-                    {isOwner ? (
+                    <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleToggleFavorite(p)}
                         title={p.is_favorite ? 'Remove from favorites' : 'Mark as favorite'}
@@ -233,11 +233,12 @@ export default function PlaylistsPage() {
                           : <svg className="w-7 h-7 text-stone-300 hover:text-amber-300" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
                         }
                       </button>
-                    ) : (
-                      <span className="text-xs font-bold text-sky-700 bg-sky-100 px-2.5 py-1 rounded-full" title={`Shared by ${p.owner_name}`}>
-                        🤝 {p.role === 'editor' ? 'Editor' : 'Shared'}
-                      </span>
-                    )}
+                      {!isOwner && (
+                        <span className="text-xs font-bold text-sky-700 bg-sky-100 px-2.5 py-1 rounded-full" title={`Shared by ${p.owner_name}`}>
+                          🤝 {p.role === 'editor' ? 'Editor' : 'Shared'}
+                        </span>
+                      )}
+                    </div>
                     {isOwner && (
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
