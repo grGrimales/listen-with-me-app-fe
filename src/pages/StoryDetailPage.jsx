@@ -467,14 +467,20 @@ export default function StoryDetailPage() {
 
     const parts = text.split(pattern)
     return parts.map((part, i) => {
-      const isMatch = sortedVocab.some(v => v.phrase.toLowerCase() === part.toLowerCase())
-      if (isMatch) {
+      const matchVocab = sortedVocab.find(v => v.phrase.toLowerCase() === part.toLowerCase())
+      if (matchVocab) {
         return (
           <span
             key={i}
-            onClick={(e) => { e.stopPropagation(); speak(part) }}
+            onClick={(e) => {
+              e.stopPropagation()
+              // Don't hijack a text selection (used to save more vocab).
+              if (window.getSelection()?.toString().trim()) return
+              // Play the story-audio segment, same as the chips below the paragraph.
+              speakVocab(matchVocab)
+            }}
             className="cursor-pointer bg-emerald-100/80 text-emerald-900 px-0.5 rounded border-b-2 border-emerald-400 font-bold transition-all hover:bg-emerald-200"
-            title="Click to hear pronunciation"
+            title="Click to hear it from the story audio"
           >
             {part}
           </span>
