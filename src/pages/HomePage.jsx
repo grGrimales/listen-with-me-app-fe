@@ -91,6 +91,22 @@ function PhrasesDropdown() {
           >
             📖 From Stories
           </Link>
+          <div className="grid grid-cols-2 border-b border-stone-100">
+            <Link
+              to="/phrases/zen"
+              onClick={() => setOpen(false)}
+              className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-xs sm:text-sm font-bold text-stone-700 hover:bg-emerald-50 hover:text-emerald-700 transition border-r border-stone-100"
+            >
+              🧘 Zen Mode
+            </Link>
+            <Link
+              to="/phrases/zen/stats"
+              onClick={() => setOpen(false)}
+              className="flex items-center justify-center gap-1.5 px-3 py-2.5 text-xs sm:text-sm font-bold text-stone-700 hover:bg-emerald-50 hover:text-emerald-700 transition"
+            >
+              🧘 Zen Stats
+            </Link>
+          </div>
 
           <div className="px-4 pt-3 pb-1 text-[10px] text-stone-400 font-semibold uppercase tracking-wider">
             Jump to a playlist
@@ -679,6 +695,10 @@ export default function HomePage() {
               <Link to="/phrases/from-stories" onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center gap-3 px-4 pl-10 py-2.5 text-xs font-semibold text-stone-500 hover:bg-stone-50 transition">
                 └ 📖 From Stories
+              </Link>
+              <Link to="/phrases/zen" onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-3 px-4 pl-10 py-2.5 text-xs font-semibold text-stone-500 hover:bg-stone-50 transition">
+                └ 🧘 Zen Mode
               </Link>
               <div className="border-t border-stone-100 mx-3" />
               {/* Language selector — mobile */}

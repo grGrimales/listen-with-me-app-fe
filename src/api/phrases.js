@@ -42,6 +42,21 @@ export function logPhraseReview(phraseId, token) {
   return request(`/api/phrases/${phraseId}/review`, token, { method: 'POST' })
 }
 
+export function logPhraseZenListen(phraseId, playlistId, token) {
+  return request(`/api/phrases/${phraseId}/zen-listen`, token, {
+    method: 'POST',
+    body: JSON.stringify({ playlist_id: playlistId }),
+  })
+}
+
+export function getMyPhraseZenStatsDetailed(token) {
+  return request('/api/phrase-zen-stats/me/detailed', token)
+}
+
+export function getPhraseZenLeaderboard(token, limit = 10) {
+  return request(`/api/phrase-zen-stats/leaderboard?limit=${limit}`, token)
+}
+
 export function ratePhrase(phraseId, quality, token) {
   return request(`/api/phrases/${phraseId}/rate`, token, {
     method: 'POST',

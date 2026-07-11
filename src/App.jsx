@@ -20,6 +20,8 @@ import PhraseImportPage from './pages/PhraseImportPage'
 import PhrasePlaylistManagePage from './pages/PhrasePlaylistManagePage'
 import PhraseVocabularyPage from './pages/PhraseVocabularyPage'
 import StoryPhrasePlaylistsPage from './pages/StoryPhrasePlaylistsPage'
+import PhraseZenPage from './pages/PhraseZenPage'
+import PhraseZenStatsPage from './pages/PhraseZenStatsPage'
 
 export default function App() {
   return (
@@ -145,6 +147,22 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <StoryPhrasePlaylistsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/phrases/zen"
+            element={
+              <ProtectedRoute>
+                <PhraseZenPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/phrases/zen/stats"
+            element={
+              <ProtectedRoute>
+                <PhraseZenStatsPage />
               </ProtectedRoute>
             }
           />

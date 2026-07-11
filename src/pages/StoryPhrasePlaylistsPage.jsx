@@ -78,26 +78,35 @@ export default function StoryPhrasePlaylistsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {playlists.map(p => (
-              <Link
+              <div
                 key={p.id}
-                to={`/phrases/${p.id}`}
-                className="bg-white rounded-2xl border border-stone-200 p-6 hover:shadow-xl hover:border-emerald-300 transition-all group flex flex-col"
+                className="relative bg-white rounded-2xl border border-stone-200 p-6 hover:shadow-xl hover:border-emerald-300 transition-all group flex flex-col"
               >
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-3xl">{LANG_FLAGS[p.language] || '🌐'}</span>
-                  <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded">
-                    📖 Story Playlist
-                  </span>
-                </div>
-                <h4 className="text-lg font-bold text-stone-800 mb-1 leading-tight group-hover:text-emerald-700 transition-colors">
-                  {p.story_playlist_name}
-                </h4>
-                <div className="mt-auto flex items-center gap-3 pt-3 border-t border-stone-100">
-                  <span className="text-xs text-stone-500 font-semibold">
-                    💬 {p.phrase_count} {p.phrase_count === 1 ? 'word' : 'words'}
-                  </span>
-                </div>
-              </Link>
+                <Link
+                  to={`/phrases/zen?playlist=${p.id}`}
+                  onClick={e => e.stopPropagation()}
+                  title="Zen mode — relax and listen"
+                  className="absolute top-4 right-4 z-10 flex items-center gap-1 text-xs font-bold text-stone-400 hover:text-emerald-600 bg-stone-50 hover:bg-emerald-50 border border-stone-200 hover:border-emerald-300 rounded-lg px-2 py-1 transition"
+                >
+                  🧘 Zen
+                </Link>
+                <Link to={`/phrases/${p.id}`} className="flex-1 flex flex-col">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-3xl">{LANG_FLAGS[p.language] || '🌐'}</span>
+                    <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded">
+                      📖 Story Playlist
+                    </span>
+                  </div>
+                  <h4 className="text-lg font-bold text-stone-800 mb-1 leading-tight group-hover:text-emerald-700 transition-colors pr-16">
+                    {p.story_playlist_name}
+                  </h4>
+                  <div className="mt-auto flex items-center gap-3 pt-3 border-t border-stone-100">
+                    <span className="text-xs text-stone-500 font-semibold">
+                      💬 {p.phrase_count} {p.phrase_count === 1 ? 'word' : 'words'}
+                    </span>
+                  </div>
+                </Link>
+              </div>
             ))}
           </div>
         )}

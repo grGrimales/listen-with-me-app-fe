@@ -150,6 +150,14 @@ export default function PhrasesPage() {
                 className={`relative bg-white rounded-2xl border p-6 hover:shadow-xl hover:border-emerald-300 transition-all group flex flex-col ${p.is_favorite ? 'border-amber-200 bg-amber-50/30' : 'border-stone-200'}`}
               >
                 <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
+                  <Link
+                    to={`/phrases/zen?playlist=${p.id}`}
+                    onClick={e => e.stopPropagation()}
+                    title="Zen mode — relax and listen"
+                    className="text-stone-300 hover:text-emerald-600 transition"
+                  >
+                    <span className="text-lg leading-none">🧘</span>
+                  </Link>
                   {isOwner && (
                     <button
                       onClick={e => { e.preventDefault(); e.stopPropagation(); setSharingPlaylist(p) }}

@@ -6,6 +6,24 @@ import { getPhraseLeaderboard, getMyPhraseStatsDetailed } from '../api/phrases'
 const LANG_LABELS = { en: 'English', pt: 'Português' }
 const LANG_FLAGS  = { en: '🇺🇸', pt: '🇧🇷' }
 
+// Wording so this page can serve both review stats and Zen-listen stats.
+export const REVIEW_LABELS = {
+  title: 'Your Phrase Stats', noun: 'review', nounPlural: 'reviews',
+  totalLabel: 'Total reviews', byPeriodTitle: 'Reviews by period',
+  emptyTitle: 'No reviews yet',
+  emptyBody: 'Head over to a phrase playlist and start reviewing — your stats will bloom here.',
+  streakStartHint: 'Review a phrase today to start a streak!',
+  whenTitle: 'When you review (hour of day, UTC)',
+}
+export const ZEN_LABELS = {
+  title: 'Your Zen Listening Stats', noun: 'listen', nounPlural: 'listens',
+  totalLabel: 'Total listens', byPeriodTitle: 'Listens by period',
+  emptyTitle: 'No Zen listens yet',
+  emptyBody: 'Start a Zen session and your listening stats will bloom here.',
+  streakStartHint: 'Listen in Zen today to start a streak!',
+  whenTitle: 'When you listen (hour of day, UTC)',
+}
+
 const PERIODS = [
   { key: 'day',   label: 'Today',      icon: '☀️' },
   { key: 'week',  label: 'This week',  icon: '📅' },
@@ -16,7 +34,11 @@ const PERIODS = [
 
 const MILESTONES = [10, 50, 100, 250, 500, 1000, 2500, 5000]
 
-export default function PhraseStatsPage() {
+export default function PhraseStatsPage({
+  fetchStats = getMyPhraseStatsDetailed,
+  fetchLeaderboard = getPhraseLeaderboard,
+  L = REVIEW_LABELS,
+} = {}) {
   const { user, token, logout } = useAuth()
   const navigate = useNavigate()
 
@@ -33,8 +55,8 @@ export default function PhraseStatsPage() {
       setError('')
       try {
         const [s, lb] = await Promise.all([
-          getMyPhraseStatsDetailed(token),
-          getPhraseLeaderboard(token, 10),
+          fetchStats(token),
+          fetchLeaderboard(token, 10),
         ])
         setStats(s)
         setLeaderboard(lb)
@@ -119,7 +141,7 @@ export default function PhraseStatsPage() {
 
       <main className="flex-1 max-w-5xl w-full mx-auto p-6">
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-stone-800 tracking-tight">📊 Your Phrase Stats</h2>
+          <h2 className="text-3xl font-bold text-stone-800 tracking-tight">📊 {L.title}</h2>
           <p className="text-sm text-stone-400 mt-1">A snapshot of your learning journey</p>
         </div>
 
@@ -133,9 +155,9 @@ export default function PhraseStatsPage() {
         ) : !stats ? null : totalReviews === 0 ? (
           <div className="bg-white rounded-2xl border border-stone-200 p-12 text-center">
             <span className="text-6xl mb-4 block">🌱</span>
-            <h3 className="text-xl font-bold text-stone-800 mb-2">No reviews yet</h3>
+            <h3 className="text-xl font-bold text-stone-800 mb-2">{L.emptyTitle}</h3>
             <p className="text-stone-500 max-w-md mx-auto mb-4">
-              Head over to a phrase playlist and start reviewing — your stats will bloom here.
+              {L.emptyBody}
             </p>
             <Link to="/phrases" className="inline-block bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 py-2.5 rounded-xl transition">
               Open playlists
@@ -146,7 +168,7 @@ export default function PhraseStatsPage() {
             {/* Hero: total + streaks */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div className="md:col-span-1 bg-gradient-to-br from-emerald-600 to-emerald-700 text-white rounded-3xl p-6 shadow-lg shadow-emerald-900/10">
-                <p className="text-xs opacity-80 font-semibold uppercase tracking-wider mb-2">Total reviews</p>
+                <p className="text-xs opacity-80 font-semibold uppercase tracking-wider mb-2">{L.totalLabel}</p>
                 <p className="text-5xl font-bold leading-none">{totalReviews.toLocaleString()}</p>
                 <p className="text-sm opacity-80 mt-3">
                   <span className="font-bold">{stats.unique_phrases}</span> unique phrases · <span className="font-bold">{stats.active_days}</span> active days
@@ -177,8 +199,8 @@ export default function PhraseStatsPage() {
                 </div>
                 <p className="text-xs text-stone-400 mt-3">
                   {stats.streak.current === 0
-                    ? 'Review a phrase today to start a streak!'
-                    : 'Keep reviewing daily to keep it alive.'}
+                    ? L.streakStartHint
+                    : 'Keep the habit daily to keep it alive.'}
                 </p>
               </div>
 
@@ -200,7 +222,7 @@ export default function PhraseStatsPage() {
 
             {/* Period counters */}
             <div className="mb-6">
-              <h3 className="text-sm font-bold text-stone-500 uppercase tracking-wider mb-3">Reviews by period</h3>
+              <h3 className="text-sm font-bold text-stone-500 uppercase tracking-wider mb-3">{L.byPeriodTitle}</h3>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                 {PERIODS.map(p => (
                   <div key={p.key} className="bg-white rounded-2xl border border-stone-200 p-4">
@@ -222,7 +244,7 @@ export default function PhraseStatsPage() {
                 <p className="text-xs text-stone-400 font-semibold uppercase tracking-wider mb-1">🌟 Best day</p>
                 {stats.best_day ? (
                   <>
-                    <p className="text-2xl font-bold text-stone-800">{stats.best_day.count} reviews</p>
+                    <p className="text-2xl font-bold text-stone-800">{stats.best_day.count} {L.nounPlural}</p>
                     <p className="text-[11px] text-stone-400 mt-0.5">{formatDate(stats.best_day.date)}</p>
                   </>
                 ) : (
@@ -234,7 +256,7 @@ export default function PhraseStatsPage() {
                 {peakHour ? (
                   <>
                     <p className="text-2xl font-bold text-stone-800">{formatHour(peakHour.hour)}</p>
-                    <p className="text-[11px] text-stone-400 mt-0.5">{peakHour.count} reviews at this hour</p>
+                    <p className="text-[11px] text-stone-400 mt-0.5">{peakHour.count} {L.nounPlural} at this hour</p>
                   </>
                 ) : (
                   <p className="text-sm text-stone-400 italic">No data yet</p>
@@ -252,7 +274,7 @@ export default function PhraseStatsPage() {
                     <div
                       key={d.date}
                       className="flex-1 flex flex-col justify-end group relative"
-                      title={`${formatDate(d.date)} — ${d.count} ${d.count === 1 ? 'review' : 'reviews'}`}
+                      title={`${formatDate(d.date)} — ${d.count} ${d.count === 1 ? L.noun : L.nounPlural}`}
                     >
                       <div
                         className={`w-full rounded-t transition-all ${d.count === 0 ? 'bg-stone-100' : 'bg-emerald-500 hover:bg-emerald-600'}`}
@@ -332,7 +354,7 @@ export default function PhraseStatsPage() {
 
             {/* Hour of day */}
             <div className="bg-white rounded-2xl border border-stone-200 p-6 mb-6">
-              <h3 className="text-sm font-bold text-stone-500 uppercase tracking-wider mb-4">⏰ When you review (hour of day, UTC)</h3>
+              <h3 className="text-sm font-bold text-stone-500 uppercase tracking-wider mb-4">⏰ {L.whenTitle}</h3>
               <div className="flex items-end gap-1 h-24">
                 {stats.hour_distribution.map((c, h) => {
                   const pct = maxHourCount > 0 ? (c / maxHourCount) * 100 : 0
@@ -342,7 +364,7 @@ export default function PhraseStatsPage() {
                         <div
                           className={`w-full rounded-t transition-all ${c === 0 ? 'bg-stone-100' : 'bg-emerald-400 hover:bg-emerald-600'}`}
                           style={{ height: c === 0 ? '3px' : `${Math.max(pct, 8)}%` }}
-                          title={`${h}:00 — ${c} reviews`}
+                          title={`${h}:00 — ${c} ${L.nounPlural}`}
                         />
                       </div>
                     </div>
@@ -398,7 +420,7 @@ export default function PhraseStatsPage() {
                   ))}
                 </div>
                 {currentRanking.length === 0 ? (
-                  <p className="text-sm text-stone-400 italic text-center py-6">No reviews recorded for this period yet.</p>
+                  <p className="text-sm text-stone-400 italic text-center py-6">No {L.nounPlural} recorded for this period yet.</p>
                 ) : (
                   <ul className="divide-y divide-stone-100">
                     {currentRanking.map((row, i) => {
