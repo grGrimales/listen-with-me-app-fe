@@ -88,6 +88,9 @@ const T = {
   },
 }
 
+const TRANS_LANG_LABELS = { es: 'Español', pt: 'Português', en: 'English' }
+const TRANS_LANG_FLAGS  = { es: '🇪🇸', pt: '🇧🇷', en: '🇺🇸' }
+
 const FONT_MIN = 14
 const FONT_MAX = 34
 const FONT_STEP = 2
@@ -104,6 +107,7 @@ export default function StoryDetailPage() {
 
   // Reading preferences (persisted)
   const [showTranslation, setShowTranslation] = useState(false)
+  const [translationLang, setTranslationLang] = useState(() => localStorage.getItem('rwm_translationLang') || 'es')
   const [showVocabulary, setShowVocabulary] = useState(false)
   const [showImages, setShowImages] = useState(() => localStorage.getItem('rwm_showImages') !== 'false')
   const [wordClickMode, setWordClickMode] = useState(() => localStorage.getItem('rwm_wordClickMode') === 'true')
@@ -126,6 +130,7 @@ export default function StoryDetailPage() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
+  useEffect(() => { localStorage.setItem('rwm_translationLang', translationLang) }, [translationLang])
   useEffect(() => { localStorage.setItem('rwm_theme', theme) }, [theme])
   useEffect(() => { localStorage.setItem('rwm_fontSize', fontSize) }, [fontSize])
   useEffect(() => { localStorage.setItem('rwm_showImages', showImages) }, [showImages])
@@ -742,6 +747,16 @@ export default function StoryDetailPage() {
   const hasWordTimestamps = isVoiceMode ? voiceHasWords : paraHasWords
   const wordClickActive = wordClickMode && hasWordTimestamps
 
+  // Translation languages available in this story, and the one currently shown (only one).
+  const translationLangs = useMemo(() => {
+    const set = new Set()
+    story?.paragraphs?.forEach(p => p.translations?.forEach(t => set.add(t.language)))
+    return [...set]
+  }, [story])
+  const effectiveTransLang = translationLangs.includes(translationLang)
+    ? translationLang
+    : (translationLangs.includes('es') ? 'es' : (translationLangs[0] || translationLang))
+
   // Logic to determine which image to show
   // Default to first paragraph if no active paragraph yet
   const activePara = story?.paragraphs?.find(p => p.id === activeParagraphId) || story?.paragraphs?.[0]
@@ -983,6 +998,22 @@ export default function StoryDetailPage() {
             >
               🌐 Translation
             </button>
+            {showTranslation && translationLangs.length > 1 && (
+              <div className="flex items-center gap-1 rounded-xl border border-stone-200 p-0.5">
+                {translationLangs.map(lng => (
+                  <button
+                    key={lng}
+                    onClick={() => setTranslationLang(lng)}
+                    title={TRANS_LANG_LABELS[lng] || lng}
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      effectiveTransLang === lng ? c.chipActive : c.chip
+                    }`}
+                  >
+                    {TRANS_LANG_FLAGS[lng] || '🌐'} {(TRANS_LANG_LABELS[lng] || lng)}
+                  </button>
+                ))}
+              </div>
+            )}
             <button
               onClick={() => setShowVocabulary(v => !v)}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
@@ -1160,10 +1191,12 @@ export default function StoryDetailPage() {
                   )}
                 </div>
 
-                {showTranslation && p.translations?.length > 0 && (
+                {showTranslation && p.translations?.some(t => t.language === effectiveTransLang) && (
                   <div className={`ml-8 rounded-2xl px-5 py-4 border mb-3 transition-all duration-300 ${isActive ? c.transCardActive : c.transCard}`}>
-                    <span className={`text-[10px] font-bold uppercase tracking-widest block mb-2 ${isActive ? c.transLabelActive : c.transLabel}`}>Translation</span>
-                    {p.translations.map(t => (
+                    <span className={`text-[10px] font-bold uppercase tracking-widest block mb-2 ${isActive ? c.transLabelActive : c.transLabel}`}>
+                      {TRANS_LANG_LABELS[effectiveTransLang] || 'Translation'}
+                    </span>
+                    {p.translations.filter(t => t.language === effectiveTransLang).map(t => (
                       <p key={`trans-${t.id}`} className={`text-base leading-relaxed italic ${c.transText}`}>{t.content}</p>
                     ))}
                   </div>

@@ -13,8 +13,8 @@ const ORDER_OPTIONS = [
 ]
 const COUNT_OPTIONS  = [5, 10, 20, 30, 0] // 0 = all
 const REPEAT_OPTIONS = [1, 2, 3, 4, 5]
-const PAUSE_OPTIONS  = [0.5, 1, 1.5, 2, 3] // seconds between phrases
-const REPEAT_GAP_MS  = 400 // small gap between repeats of the same phrase
+const PAUSE_OPTIONS  = [0.5, 1, 1.5, 2, 3] // seconds between phrases (and between repeats)
+const MINUTE_OPTIONS = [5, 10, 15, 20, 30] // total session length (time mode)
 
 function sortPhrases(list, order) {
   const arr = [...list]
@@ -49,6 +49,8 @@ function SetupScreen({ onStart, initialPlaylistId }) {
   const [repeats, setRepeats] = useState(2)
   const [pause, setPause]     = useState(1.5)
   const [voice, setVoice]     = useState('female')
+  const [sessionMode, setSessionMode] = useState('once') // 'once' | 'time'
+  const [minutes, setMinutes] = useState(10)
 
   useEffect(() => {
     Promise.all([
@@ -65,7 +67,10 @@ function SetupScreen({ onStart, initialPlaylistId }) {
 
   function handleStart() {
     if (!playlistId) return
-    onStart({ playlistId, order, count, repeats, pauseMs: Math.round(pause * 1000), voice })
+    onStart({
+      playlistId, order, count, repeats, pauseMs: Math.round(pause * 1000), voice,
+      sessionMode, timeMs: sessionMode === 'time' ? minutes * 60000 : 0,
+    })
   }
 
   if (loading) return (
@@ -166,12 +171,33 @@ function SetupScreen({ onStart, initialPlaylistId }) {
 
         {/* Pause */}
         <section className="w-full">
-          <label className="block text-xs font-bold uppercase tracking-widest text-stone-500 mb-3">Pause between phrases</label>
+          <label className="block text-xs font-bold uppercase tracking-widest text-stone-500 mb-3">Pause (between phrases &amp; repeats)</label>
           <div className="flex gap-2">
             {PAUSE_OPTIONS.map(n => (
               <Chip key={n} active={pause === n} onClick={() => setPause(n)}>{n}s</Chip>
             ))}
           </div>
+        </section>
+
+        {/* Session length: one pass through the phrases, or loop for a set time */}
+        <section className="w-full">
+          <label className="block text-xs font-bold uppercase tracking-widest text-stone-500 mb-3">Stop after</label>
+          <div className="flex gap-2 mb-3">
+            <Chip active={sessionMode === 'once'} onClick={() => setSessionMode('once')}>🔁 One pass</Chip>
+            <Chip active={sessionMode === 'time'} onClick={() => setSessionMode('time')}>⏱️ A set time</Chip>
+          </div>
+          {sessionMode === 'time' && (
+            <>
+              <div className="flex gap-2">
+                {MINUTE_OPTIONS.map(n => (
+                  <Chip key={n} active={minutes === n} onClick={() => setMinutes(n)}>{n}m</Chip>
+                ))}
+              </div>
+              <p className="text-[11px] text-stone-600 mt-2">
+                Keeps looping — when it reaches the end it re-picks a fresh set (e.g. the least-heard again) until the time is up.
+              </p>
+            </>
+          )}
         </section>
 
         {/* Voice — only for normal vocab playlists (story playlists use the story audio) */}
@@ -231,6 +257,9 @@ function PlayerScreen({ config, onEnd }) {
   const isSegmentRef = useRef(false)
   const currentUrlRef = useRef(null)
   const preloadPoolRef = useRef([])
+  const cancelledRef = useRef(false)
+  const sessionStartRef = useRef(0)    // ms timestamp when playback started (time mode)
+  const totalPlayedRef = useRef(0)     // phrases fully listened (across cycles)
 
   const [phase, setPhase]   = useState('loading') // loading | generating | preloading | playing | error
   const [progress, setProgress] = useState({ done: 0, total: 0 })
@@ -239,6 +268,8 @@ function PlayerScreen({ config, onEnd }) {
   const [currentIdx, setCurrentIdx] = useState(0)
   const [repeatNo, setRepeatNo]     = useState(1)
   const [isPlaying, setIsPlaying]   = useState(false)
+  const [recalculating, setRecalculating] = useState(false)
+  const [remainingSec, setRemainingSec]   = useState(null)
 
   function clearTimers() {
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
@@ -282,25 +313,115 @@ function PlayerScreen({ config, onEnd }) {
     timeoutRef.current = setTimeout(() => { pendingRef.current = null; fn() }, ms)
   }
 
-  const advance = useCallback(() => {
-    const next = idxRef.current + 1
-    if (next >= queueRef.current.length) { onEnd(queueRef.current.length); return }
-    idxRef.current = next
+  // Fetches the playlist, sorts/limits by config, generates any missing Polly audio
+  // and preloads everything. Returns the descriptor list (empty if none playable).
+  // Called on start (showProgress) and again each cycle in time mode (fresh data, so
+  // e.g. "least heard" re-picks a different set as zen counts update).
+  const buildDescriptors = useCallback(async (showProgress) => {
+    const pl = await getPhrasePlaylist(config.playlistId, token)
+    let phrases = (pl.groups || []).flatMap(g => g.phrases || []).filter(p => p && p.text)
+    phrases = sortPhrases(phrases, config.order)
+    if (config.count > 0) phrases = phrases.slice(0, config.count)
+    if (phrases.length === 0) return []
+
+    const orderIndex = new Map(phrases.map((p, i) => [p.id, i]))
+    const descriptors = []
+    const needGen = []
+    for (const p of phrases) {
+      if (p.source_audio_url) {
+        descriptors.push({ id: p.id, text: p.text, url: p.source_audio_url, isSegment: true,
+          start: (p.source_start_ms || 0) / 1000, end: (p.source_end_ms || 0) / 1000 })
+      } else {
+        const cached = config.voice === 'male'
+          ? (p.polly_audio_url_male || p.polly_audio_url_female)
+          : (p.polly_audio_url_female || p.polly_audio_url_male)
+        if (cached) descriptors.push({ id: p.id, text: p.text, url: cached, isSegment: false })
+        else needGen.push(p)
+      }
+    }
+
+    if (needGen.length > 0) {
+      if (showProgress) { setPhase('generating'); setProgress({ done: 0, total: needGen.length }) }
+      for (let i = 0; i < needGen.length; i++) {
+        if (cancelledRef.current) return []
+        try {
+          const { audio_url } = await generatePollyAudio(needGen[i].id, config.voice, token)
+          descriptors.push({ id: needGen[i].id, text: needGen[i].text, url: audio_url, isSegment: false })
+        } catch (e) { console.error('zen generate audio failed', needGen[i].id, e) }
+        if (showProgress) setProgress({ done: i + 1, total: needGen.length })
+      }
+    }
+
+    descriptors.sort((a, b) => (orderIndex.get(a.id) ?? 0) - (orderIndex.get(b.id) ?? 0))
+    if (descriptors.length === 0) return []
+
+    if (showProgress) { setPhase('preloading'); setProgress({ done: 0, total: descriptors.length }) }
+    const uniqueUrls = [...new Set(descriptors.map(d => d.url))]
+    let pdone = 0
+    preloadPoolRef.current.forEach(a => { a.src = '' })
+    preloadPoolRef.current = []
+    await Promise.all(uniqueUrls.map(url => new Promise(resolve => {
+      const a = new Audio()
+      a.preload = 'auto'
+      const done = () => { pdone++; if (showProgress) setProgress({ done: Math.min(pdone, descriptors.length), total: descriptors.length }); resolve() }
+      a.addEventListener('canplaythrough', done, { once: true })
+      a.addEventListener('error', done, { once: true })
+      setTimeout(done, 8000)
+      a.src = url
+      preloadPoolRef.current.push(a)
+      a.load()
+    })))
+    return descriptors
+  }, [config, token])
+
+  // Time mode: at the end of a cycle, rebuild a fresh queue and keep going.
+  const recalcAndContinue = useCallback(async () => {
+    setRecalculating(true)
+    let descs = []
+    try { descs = await buildDescriptors(false) } catch (e) { console.error('zen recalc failed', e) }
+    setRecalculating(false)
+    if (cancelledRef.current) return
+    if (!descs || descs.length === 0) { onEnd(totalPlayedRef.current); return }
+    queueRef.current = descs
+    setQueue(descs)
+    idxRef.current = 0
     repeatRef.current = 0
-    setCurrentIdx(next)
+    setCurrentIdx(0)
     setRepeatNo(1)
-    startPlay(queueRef.current[next])
-  }, [onEnd, startPlay])
+    startPlay(descs[0])
+  }, [buildDescriptors, onEnd, startPlay])
+
+  const advance = useCallback(() => {
+    // Time mode: stop once the total time is reached (checked at each phrase boundary).
+    if (config.sessionMode === 'time' && (Date.now() - sessionStartRef.current) >= config.timeMs) {
+      onEnd(totalPlayedRef.current)
+      return
+    }
+    const next = idxRef.current + 1
+    if (next < queueRef.current.length) {
+      idxRef.current = next
+      repeatRef.current = 0
+      setCurrentIdx(next)
+      setRepeatNo(1)
+      startPlay(queueRef.current[next])
+      return
+    }
+    // Reached the end of the current cycle.
+    if (config.sessionMode === 'time') { recalcAndContinue(); return }
+    onEnd(totalPlayedRef.current)
+  }, [config, onEnd, startPlay, recalcAndContinue])
 
   function onPhraseEnded() {
     repeatRef.current += 1
     if (repeatRef.current < config.repeats) {
+      // Same pause between repeats as between phrases.
       setRepeatNo(repeatRef.current + 1)
-      schedule(() => startPlay(queueRef.current[idxRef.current]), REPEAT_GAP_MS)
+      schedule(() => startPlay(queueRef.current[idxRef.current]), config.pauseMs)
     } else {
       // Log one independent Zen listen for this phrase (after all its repeats).
       const d = queueRef.current[idxRef.current]
       if (d) logPhraseZenListen(d.id, config.playlistId, token).catch(() => {})
+      totalPlayedRef.current += 1
       schedule(advance, config.pauseMs)
     }
   }
@@ -322,81 +443,28 @@ function PlayerScreen({ config, onEnd }) {
     }
   }) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Prepare: load playlist, resolve audio, generate missing, preload
+  // Prepare on mount: build the first queue, then switch to the playing phase.
   useEffect(() => {
-    let cancelled = false
-    async function prepare() {
+    cancelledRef.current = false
+    ;(async () => {
       try {
-        const pl = await getPhrasePlaylist(config.playlistId, token)
-        let phrases = (pl.groups || []).flatMap(g => g.phrases || []).filter(p => p && p.text)
-        phrases = sortPhrases(phrases, config.order)
-        if (config.count > 0) phrases = phrases.slice(0, config.count)
-        if (phrases.length === 0) { if (!cancelled) { setError('This playlist has no phrases.'); setPhase('error') } return }
-
-        const orderIndex = new Map(phrases.map((p, i) => [p.id, i]))
-        const descriptors = []
-        const needGen = []
-        for (const p of phrases) {
-          if (p.source_audio_url) {
-            descriptors.push({ id: p.id, text: p.text, url: p.source_audio_url, isSegment: true,
-              start: (p.source_start_ms || 0) / 1000, end: (p.source_end_ms || 0) / 1000 })
-          } else {
-            const cached = config.voice === 'male'
-              ? (p.polly_audio_url_male || p.polly_audio_url_female)
-              : (p.polly_audio_url_female || p.polly_audio_url_male)
-            if (cached) descriptors.push({ id: p.id, text: p.text, url: cached, isSegment: false })
-            else needGen.push(p)
-          }
-        }
-
-        // Generate missing Polly audio (progress shown)
-        if (needGen.length > 0) {
-          if (!cancelled) { setPhase('generating'); setProgress({ done: 0, total: needGen.length }) }
-          for (let i = 0; i < needGen.length; i++) {
-            if (cancelled) return
-            try {
-              const { audio_url } = await generatePollyAudio(needGen[i].id, config.voice, token)
-              descriptors.push({ id: needGen[i].id, text: needGen[i].text, url: audio_url, isSegment: false })
-            } catch (e) { console.error('zen generate audio failed', needGen[i].id, e) }
-            if (!cancelled) setProgress({ done: i + 1, total: needGen.length })
-          }
-        }
-
-        descriptors.sort((a, b) => (orderIndex.get(a.id) ?? 0) - (orderIndex.get(b.id) ?? 0))
-        if (descriptors.length === 0) { if (!cancelled) { setError('No audio available for these phrases.'); setPhase('error') } return }
-
-        // Preload / warm cache for all unique URLs
-        if (!cancelled) { setPhase('preloading'); setProgress({ done: 0, total: descriptors.length }) }
-        const uniqueUrls = [...new Set(descriptors.map(d => d.url))]
-        let pdone = 0
-        preloadPoolRef.current = []
-        await Promise.all(uniqueUrls.map(url => new Promise(resolve => {
-          const a = new Audio()
-          a.preload = 'auto'
-          const done = () => { pdone++; if (!cancelled) setProgress({ done: Math.min(pdone, descriptors.length), total: descriptors.length }); resolve() }
-          a.addEventListener('canplaythrough', done, { once: true })
-          a.addEventListener('error', done, { once: true })
-          setTimeout(done, 8000) // fallback so we never hang
-          a.src = url
-          preloadPoolRef.current.push(a)
-          a.load()
-        })))
-
-        if (cancelled) return
-        queueRef.current = descriptors
-        setQueue(descriptors)
+        const descs = await buildDescriptors(true)
+        if (cancelledRef.current) return
+        if (!descs || descs.length === 0) { setError('No audio available for these phrases.'); setPhase('error'); return }
+        queueRef.current = descs
+        setQueue(descs)
         idxRef.current = 0
         repeatRef.current = 0
+        totalPlayedRef.current = 0
         setCurrentIdx(0)
         setRepeatNo(1)
         setPhase('playing') // playback starts in the effect below, once <audio> is mounted
       } catch (e) {
-        if (!cancelled) { setError(e.message); setPhase('error') }
+        if (!cancelledRef.current) { setError(e.message); setPhase('error') }
       }
-    }
-    prepare()
+    })()
     return () => {
-      cancelled = true
+      cancelledRef.current = true
       clearTimers()
       const audio = audioRef.current
       if (audio) { audio.pause(); audio.src = '' }
@@ -405,15 +473,26 @@ function PlayerScreen({ config, onEnd }) {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Start playback once the <audio> element is mounted (phase === 'playing').
-  // Doing this here (not inside prepare) guarantees audioRef.current exists so the
-  // src actually gets set. If the browser blocks autoplay, the user's Play tap works
-  // because the src is already loaded.
+  // Guarantees audioRef.current exists so the src actually gets set.
   useEffect(() => {
     if (phase === 'playing' && audioRef.current && queueRef.current.length) {
+      if (!sessionStartRef.current) sessionStartRef.current = Date.now()
       startPlay(queueRef.current[idxRef.current])
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
+
+  // Countdown for time-mode sessions.
+  useEffect(() => {
+    if (phase !== 'playing' || config.sessionMode !== 'time') return
+    const tick = () => {
+      const start = sessionStartRef.current || Date.now()
+      setRemainingSec(Math.max(0, Math.ceil((config.timeMs - (Date.now() - start)) / 1000)))
+    }
+    tick()
+    const iv = setInterval(tick, 1000)
+    return () => clearInterval(iv)
+  }, [phase, config])
 
   function togglePlay() {
     const audio = audioRef.current
@@ -478,13 +557,22 @@ function PlayerScreen({ config, onEnd }) {
   return (
     <div className="min-h-screen bg-stone-950 text-stone-100 flex flex-col">
       <audio ref={audioRef} />
+
+      {recalculating && (
+        <div className="fixed inset-0 z-50 bg-stone-950/70 backdrop-blur-sm flex flex-col items-center justify-center gap-3">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500" />
+          <p className="text-sm text-stone-400 font-semibold">Re-picking a fresh set…</p>
+        </div>
+      )}
       <header className="px-6 py-4 flex items-center justify-between border-b border-stone-800/50">
         <button onClick={() => onEnd(currentIdx + 1)} className="text-stone-600 hover:text-stone-400 transition text-sm">✕ Exit</button>
         <div className="flex flex-col items-center">
           <span className="text-xs text-stone-600 font-medium">Zen · Phrases</span>
           <span className="text-xs text-stone-500">{currentIdx + 1} / {queue.length}</span>
         </div>
-        <div className="text-sm text-stone-700 font-mono">{config.repeats}×</div>
+        {config.sessionMode === 'time'
+          ? <div className="text-sm font-mono text-emerald-400" title="Time left">⏱️ {fmtMMSS(remainingSec)}</div>
+          : <div className="text-sm text-stone-700 font-mono">{config.repeats}×</div>}
       </header>
 
       <main className="flex-1 flex flex-col items-center justify-center px-6 py-8 max-w-md mx-auto w-full gap-8">
@@ -565,4 +653,11 @@ export default function PhraseZenPage() {
   if (screen === 'setup') return <SetupScreen initialPlaylistId={initialPlaylistId} onStart={cfg => { setConfig(cfg); setScreen('player') }} />
   if (screen === 'player') return <PlayerScreen config={config} onEnd={n => { setCount(n); setScreen('complete') }} />
   return <CompleteScreen count={count} onRestart={() => { setConfig(null); setScreen('setup') }} />
+}
+
+function fmtMMSS(sec) {
+  if (sec == null || isNaN(sec)) return '--:--'
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
 }
