@@ -195,8 +195,10 @@ export const getZenStories = (token, { playlistId, limit, sort } = {}) => {
   if (playlistId) params.set('playlist_id', playlistId)
   if (limit) params.set('limit', limit)
   if (sort) params.set('sort', sort)
+  // Cache-bust so the browser never replays a previous (already shuffled) response.
+  params.set('_t', Date.now())
   const qs = params.toString()
-  return request(`/api/zen/stories${qs ? `?${qs}` : ''}`, token)
+  return request(`/api/zen/stories${qs ? `?${qs}` : ''}`, token, { cache: 'no-store' })
 }
 export const logZenListen = (storyId, token) => request('/api/zen/listen', token, {
   method: 'POST',

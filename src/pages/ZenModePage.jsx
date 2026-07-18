@@ -93,6 +93,13 @@ const SORT_OPTIONS = [
 
 const COUNT_OPTIONS = [3, 5, 10, 15, 20]
 
+// Pauses to make the session feel calmer, applied ONLY while the screen is on.
+// When the screen is locked (document hidden) we play the next segment with no
+// gap so the media session never goes idle — otherwise mobile browsers suspend
+// the page during the silence and playback dies (especially on iOS).
+const PARA_GAP_MS  = 1500  // small pause between paragraphs of a story
+const STORY_GAP_MS = 3500  // longer pause between stories
+
 // ── Setup Screen ─────────────────────────────────────────────────────────────
 function SetupScreen({ onStart }) {
   const { token } = useAuth()
@@ -249,6 +256,7 @@ function PlayerScreen({ config, onEnd }) {
   const countRef      = useRef(0)
   const autoPlayRef   = useRef(false)   // true when advancing stories automatically
   const preloadedDetailRef = useRef(null)
+  const prefetchRef   = useRef(null)    // warms the next paragraph's audio into cache
 
   // Rendered state (drives UI)
   const [queue, setQueueState]       = useState([])
@@ -305,7 +313,20 @@ function PlayerScreen({ config, onEnd }) {
     const audio = audioRef.current
     if (!audio) return
 
-    const onTime     = () => setCurrentTime(audio.currentTime)
+    const onTime     = () => {
+      setCurrentTime(audio.currentTime)
+      // Keep the lock-screen scrubber in sync and the media session healthy.
+      if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession
+          && audio.duration && isFinite(audio.duration)) {
+        try {
+          navigator.mediaSession.setPositionState({
+            duration: audio.duration,
+            position: Math.min(audio.currentTime, audio.duration),
+            playbackRate: audio.playbackRate || 1,
+          })
+        } catch { /* ignore */ }
+      }
+    }
     const onDuration = () => setDuration(audio.duration || 0)
     const onPlay     = () => {
       setIsPlaying(true)
@@ -332,10 +353,15 @@ function PlayerScreen({ config, onEnd }) {
         // load & play next paragraph directly — don't go through useEffect
         audio.src = src
         audio.load()
-        // use minimal delay when screen is locked to avoid background timer throttling
-        const delay = document.visibilityState === 'hidden' ? 50 : 800
-        await new Promise(resolve => setTimeout(resolve, delay))
-        audio.play().catch(e => { if (e.name !== 'AbortError') console.error(e) })
+        if (document.visibilityState === 'hidden') {
+          // Screen locked: play immediately (no silent gap) so the OS keeps the
+          // media session alive and doesn't suspend the page between paragraphs.
+          audio.play().catch(e => { if (e.name !== 'AbortError') console.error(e) })
+        } else {
+          // Screen on: keep the calm little pause between paragraphs.
+          await new Promise(resolve => setTimeout(resolve, PARA_GAP_MS))
+          audio.play().catch(e => { if (e.name !== 'AbortError') console.error(e) })
+        }
       } else {
         // all paragraphs done → log + advance to next story
         await logListen(queueRef.current[idxRef.current]?.id)
@@ -373,6 +399,19 @@ function PlayerScreen({ config, onEnd }) {
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
   }, [])
+
+  // ── prefetch next paragraph audio so the segment swap is instant ───────────
+  // A gapless swap keeps the media session continuously active, which is what
+  // lets playback survive a screen lock on mobile.
+
+  useEffect(() => {
+    const paras = detail?._paras || []
+    const nextUrl = paras[paraIdx + 1]?.audio_url
+    if (!nextUrl) return
+    if (!prefetchRef.current) prefetchRef.current = new Audio()
+    prefetchRef.current.preload = 'auto'
+    prefetchRef.current.src = nextUrl
+  }, [paraIdx, detail])
 
   // ── controls ───────────────────────────────────────────────────────────────
 
@@ -483,7 +522,13 @@ function PlayerScreen({ config, onEnd }) {
       audio.load()
       if (autoPlayRef.current) {
         autoPlayRef.current = false
-        audio.play().catch(e => { if (e.name !== 'AbortError') console.error(e) })
+        // Longer pause between stories with the screen on; no gap when locked so
+        // the background media session doesn't get suspended during the silence.
+        const gap = document.visibilityState === 'hidden' ? 0 : STORY_GAP_MS
+        const t = setTimeout(() => {
+          audio.play().catch(e => { if (e.name !== 'AbortError') console.error(e) })
+        }, gap)
+        return () => clearTimeout(t)
       }
     }
   }, [detail])
@@ -566,7 +611,7 @@ function PlayerScreen({ config, onEnd }) {
 
   return (
     <div className="min-h-screen bg-stone-950 text-stone-100 flex flex-col">
-      <audio ref={audioRef} />
+      <audio ref={audioRef} preload="auto" />
 
       {/* Top bar */}
       <header className="px-6 py-4 flex items-center justify-between border-b border-stone-800/50">
