@@ -9,6 +9,10 @@ const LANG_FLAGS  = { en: '🇺🇸', pt: '🇧🇷' }
 // Single ElevenLabs voice per language (female).
 const VOICE_NAMES = { en: 'Hope', pt: 'Ana Dias' }
 
+// "Repeat" playback: play the phrase this many times with a short pause between plays.
+const REPEAT_TIMES = 20
+const REPEAT_PAUSE_MS = 600
+
 const SORT_OPTIONS = [
   { value: 'playlist',       label: '📋 Playlist order' },
   { value: 'newest',         label: '🆕 Newest first' },
@@ -72,6 +76,8 @@ export default function PhrasePlaylistDetailPage() {
   const [revealed, setRevealed] = useState(false)
   const [pollyPlaying, setPollyPlaying] = useState(null) // 'audio' | 'story' | null
   const [pollyLoading, setPollyLoading] = useState(false)
+  const [repeatPlaying, setRepeatPlaying] = useState(false) // 20x loop active
+  const [repeatCount, setRepeatCount] = useState(0)          // plays done in current loop
   const [currentAudio, setCurrentAudio] = useState(null)
   const [sessionReviews, setSessionReviews] = useState(0)
   const [lastRatingResult, setLastRatingResult] = useState(null)
@@ -310,8 +316,17 @@ export default function PhrasePlaylistDetailPage() {
 
   // Stop any in-flight audio when phrase / filter / sort changes or the page unmounts
   const segStopRef = useRef(null)
+  // Holds the running 20x-repeat loop so any stop can cancel it.
+  const repeatStateRef = useRef({ cancelled: true, timer: null, audio: null })
+
   const stopAudio = useCallback(() => {
     if (segStopRef.current) { cancelAnimationFrame(segStopRef.current); segStopRef.current = null }
+    // Cancel any in-flight repeat loop (timer + queued next play).
+    const st = repeatStateRef.current
+    st.cancelled = true
+    if (st.timer) { clearTimeout(st.timer); st.timer = null }
+    st.audio = null
+    setRepeatPlaying(false)
     setCurrentAudio(prev => {
       if (prev) { try { prev.pause() } catch { /* noop */ } }
       return null
@@ -321,43 +336,90 @@ export default function PhrasePlaylistDetailPage() {
   useEffect(() => { return stopAudio }, [stopAudio])
   useEffect(() => { stopAudio() }, [index, groupFilterId, sortBy, stopAudio])
 
-  const playPhraseAudio = useCallback(async () => {
-    if (!current) return
-    stopAudio()
-    const cached = current.polly_audio_url_female
-
-    const playURL = (url) => {
-      const audio = new Audio(url)
-      setCurrentAudio(audio)
-      audio.onplay = () => setPollyPlaying('audio')
-      audio.onended = () => { setPollyPlaying(null); setCurrentAudio(null) }
-      audio.onerror = () => { setPollyPlaying(null); setCurrentAudio(null) }
-      audio.play().catch(err => {
-        // AbortError is expected when we intentionally interrupt with pause() — ignore it.
-        if (err && err.name !== 'AbortError') console.error('Phrase audio playback:', err)
-        setPollyPlaying(null)
-        setCurrentAudio(null)
-      })
-    }
-
-    if (cached) { playURL(cached); return }
-
+  // Returns the phrase's audio URL, generating (and caching on the deck) it on first use.
+  // We deliberately don't touch `playlist` state — mutating it would trigger a deck rebuild
+  // that reshuffles random/SRS orderings, making the "next" phrase appear.
+  const ensureAudioURL = useCallback(async () => {
+    if (!current) return null
+    if (current.polly_audio_url_female) return current.polly_audio_url_female
     setPollyLoading(true)
     try {
       const { audio_url } = await generatePhraseAudio(current.id, token)
-      // Update the current phrase's URL directly on the deck. We deliberately don't
-      // touch `playlist` state — mutating it would trigger a deck rebuild that reshuffles
-      // random/SRS orderings, making the "next" phrase appear.
       setDeck(prev => prev.map(p => p.id === current.id
         ? { ...p, polly_audio_url_female: audio_url }
         : p))
-      playURL(audio_url)
+      return audio_url
     } catch (err) {
       alert(`Audio failed: ${err.message}`)
+      return null
     } finally {
       setPollyLoading(false)
     }
-  }, [current, token, stopAudio])
+  }, [current, token])
+
+  const playPhraseAudio = useCallback(async () => {
+    if (!current) return
+    stopAudio()
+    const url = await ensureAudioURL()
+    if (!url) return
+    const audio = new Audio(url)
+    setCurrentAudio(audio)
+    audio.onplay = () => setPollyPlaying('audio')
+    audio.onended = () => { setPollyPlaying(null); setCurrentAudio(null) }
+    audio.onerror = () => { setPollyPlaying(null); setCurrentAudio(null) }
+    audio.play().catch(err => {
+      // AbortError is expected when we intentionally interrupt with pause() — ignore it.
+      if (err && err.name !== 'AbortError') console.error('Phrase audio playback:', err)
+      setPollyPlaying(null)
+      setCurrentAudio(null)
+    })
+  }, [current, stopAudio, ensureAudioURL])
+
+  // Repeat the phrase REPEAT_TIMES with a short pause between plays. Clicking the button
+  // while running stops it (toggle); clicking again restarts the count. Any other audio
+  // action or navigating to the next phrase cancels it via stopAudio().
+  const startRepeat = useCallback(async () => {
+    if (!current) return
+    if (repeatPlaying) { stopAudio(); return } // toggle off
+    stopAudio()                                 // interrupt any single playback
+    const url = await ensureAudioURL()
+    if (!url) return
+    const st = repeatStateRef.current
+    st.cancelled = false
+    setRepeatCount(0)
+    setRepeatPlaying(true)
+    let count = 0
+    const playOnce = () => {
+      if (st.cancelled) return
+      const audio = new Audio(url)
+      st.audio = audio
+      setCurrentAudio(audio)
+      audio.onended = () => {
+        if (st.cancelled) return
+        count += 1
+        setRepeatCount(count)
+        if (count >= REPEAT_TIMES) {
+          st.cancelled = true
+          st.audio = null
+          setCurrentAudio(null)
+          setRepeatPlaying(false)
+          return
+        }
+        st.timer = setTimeout(() => { if (!st.cancelled) playOnce() }, REPEAT_PAUSE_MS)
+      }
+      audio.onerror = () => {
+        st.cancelled = true; st.audio = null
+        setCurrentAudio(null); setRepeatPlaying(false)
+      }
+      audio.play().catch(err => {
+        if (err && err.name !== 'AbortError') {
+          console.error('Repeat playback:', err)
+          st.cancelled = true; setRepeatPlaying(false); setCurrentAudio(null)
+        }
+      })
+    }
+    playOnce()
+  }, [current, repeatPlaying, stopAudio, ensureAudioURL])
 
   // Play the story-audio segment for a story-linked phrase: reuses the story's own
   // audio, playing only [source_start_ms, source_end_ms]. Stops precisely via rAF.
@@ -442,10 +504,11 @@ export default function PhrasePlaylistDetailPage() {
         if (['f', 'p'].includes(e.key.toLowerCase())) playStorySegment()
       }
       else if (['f', 'p'].includes(e.key.toLowerCase()) && current) { playPhraseAudio() }
+      else if (e.key.toLowerCase() === 'r' && current) { startRepeat() }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [goNext, goPrev, rate, playPhraseAudio, playStorySegment, current, isSRS])
+  }, [goNext, goPrev, rate, playPhraseAudio, startRepeat, playStorySegment, current, isSRS])
 
   function handleLogout() {
     logout()
@@ -754,32 +817,54 @@ export default function PhrasePlaylistDetailPage() {
                     </div>
                   ) : (
                   /* Single ElevenLabs voice (female: Hope for en, Ana Dias for pt) */
-                  <div className="flex items-center justify-center mb-6">
+                  <div className="flex items-center justify-center gap-6 mb-6">
                     {(() => {
                       const cached = current.polly_audio_url_female
                       const voiceName = VOICE_NAMES[playlist.language] || 'Voice'
                       return (
-                        <div className="flex flex-col items-center gap-1">
-                          <button
-                            onClick={playPhraseAudio}
-                            disabled={pollyLoading}
-                            title={`${voiceName} — F key`}
-                            className={`w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-sm border-2 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 ${pollyPlaying === 'audio' ? 'bg-pink-500 border-pink-500 text-white animate-pulse' : 'bg-white border-pink-200 text-pink-600 hover:bg-pink-50 hover:border-pink-400'}`}
-                          >
-                            {pollyLoading ? (
-                              <svg className="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/>
-                                <path className="opacity-90" d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
-                              </svg>
-                            ) : (
-                              <span className="text-2xl">🔊</span>
-                            )}
-                          </button>
-                          <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider flex items-center gap-1">
-                            {voiceName}
-                            {cached && <span className="text-emerald-500" title="Cached">●</span>}
-                          </span>
-                        </div>
+                        <>
+                          {/* Single play */}
+                          <div className="flex flex-col items-center gap-1">
+                            <button
+                              onClick={playPhraseAudio}
+                              disabled={pollyLoading}
+                              title={`${voiceName} — F key`}
+                              className={`w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-sm border-2 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 ${pollyPlaying === 'audio' ? 'bg-pink-500 border-pink-500 text-white animate-pulse' : 'bg-white border-pink-200 text-pink-600 hover:bg-pink-50 hover:border-pink-400'}`}
+                            >
+                              {pollyLoading ? (
+                                <svg className="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/>
+                                  <path className="opacity-90" d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
+                                </svg>
+                              ) : (
+                                <span className="text-2xl">🔊</span>
+                              )}
+                            </button>
+                            <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider flex items-center gap-1">
+                              {voiceName}
+                              {cached && <span className="text-emerald-500" title="Cached">●</span>}
+                            </span>
+                          </div>
+
+                          {/* Repeat 20x */}
+                          <div className="flex flex-col items-center gap-1">
+                            <button
+                              onClick={startRepeat}
+                              disabled={pollyLoading}
+                              title={`Repetir ${REPEAT_TIMES} veces — R key`}
+                              className={`w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-sm border-2 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 ${repeatPlaying ? 'bg-indigo-600 border-indigo-600 text-white animate-pulse' : 'bg-white border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-400'}`}
+                            >
+                              {repeatPlaying ? (
+                                <span className="text-sm font-extrabold">{repeatCount}/{REPEAT_TIMES}</span>
+                              ) : (
+                                <span className="text-2xl">🔁</span>
+                              )}
+                            </button>
+                            <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">
+                              {repeatPlaying ? 'Detener' : `Repetir ${REPEAT_TIMES}×`}
+                            </span>
+                          </div>
+                        </>
                       )
                     })()}
                   </div>
@@ -883,8 +968,8 @@ export default function PhrasePlaylistDetailPage() {
 
                 <p className="text-[11px] text-stone-300 text-center mt-4">
                   {isSRS
-                    ? 'Tip: reveal · 1=Again · 2=Hard · 3=Good · 4=Easy · F=play audio'
-                    : 'Tip: ← → navigate · space to reveal · F=play audio'}
+                    ? 'Tip: reveal · 1=Again · 2=Hard · 3=Good · 4=Easy · F=play audio · R=repeat 20×'
+                    : 'Tip: ← → navigate · space to reveal · F=play audio · R=repeat 20×'}
                 </p>
               </>
             )}
