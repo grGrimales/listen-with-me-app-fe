@@ -86,6 +86,12 @@ export function deletePhraseGroup(groupId, token) {
   return request(`/api/phrase-groups/${groupId}`, token, { method: 'DELETE' })
 }
 
+// Single phrase audio generated with ElevenLabs (female voice: Hope/Ana Dias).
+export function generatePhraseAudio(phraseId, token) {
+  return request(`/api/phrases/${phraseId}/audio/generate`, token, { method: 'POST' })
+}
+
+// Polly audio (kept for saved vocabulary words — female voice).
 export function generatePollyAudio(phraseId, voice, token) {
   return request(`/api/phrases/${phraseId}/audio/polly?voice=${voice}`, token, { method: 'POST' })
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { listPhrasePlaylists, getPhrasePlaylist, generatePollyAudio, logPhraseZenListen } from '../api/phrases'
+import { listPhrasePlaylists, getPhrasePlaylist, generatePhraseAudio, logPhraseZenListen } from '../api/phrases'
 import { listStoryPhrasePlaylists } from '../api/stories'
 
 // ── Config options ────────────────────────────────────────────────────────────
@@ -48,7 +48,6 @@ function SetupScreen({ onStart, initialPlaylistId }) {
   const [count, setCount]     = useState(10)
   const [repeats, setRepeats] = useState(2)
   const [pause, setPause]     = useState(1.5)
-  const [voice, setVoice]     = useState('female')
   const [sessionMode, setSessionMode] = useState('once') // 'once' | 'time'
   const [minutes, setMinutes] = useState(10)
 
@@ -68,7 +67,7 @@ function SetupScreen({ onStart, initialPlaylistId }) {
   function handleStart() {
     if (!playlistId) return
     onStart({
-      playlistId, order, count, repeats, pauseMs: Math.round(pause * 1000), voice,
+      playlistId, order, count, repeats, pauseMs: Math.round(pause * 1000),
       sessionMode, timeMs: sessionMode === 'time' ? minutes * 60000 : 0,
     })
   }
@@ -200,16 +199,6 @@ function SetupScreen({ onStart, initialPlaylistId }) {
           )}
         </section>
 
-        {/* Voice — only for normal vocab playlists (story playlists use the story audio) */}
-        {selected?.type === 'normal' && (
-          <section className="w-full">
-            <label className="block text-xs font-bold uppercase tracking-widest text-stone-500 mb-3">Voice</label>
-            <div className="flex gap-2">
-              <Chip active={voice === 'female'} onClick={() => setVoice('female')}>👩 Female</Chip>
-              <Chip active={voice === 'male'} onClick={() => setVoice('male')}>👨 Male</Chip>
-            </div>
-          </section>
-        )}
         {selected?.type === 'story' && (
           <p className="w-full text-[11px] text-stone-600 bg-stone-900 rounded-xl px-4 py-3 border border-stone-800">
             🎧 This playlist uses the story's own audio.
@@ -332,9 +321,7 @@ function PlayerScreen({ config, onEnd }) {
         descriptors.push({ id: p.id, text: p.text, url: p.source_audio_url, isSegment: true,
           start: (p.source_start_ms || 0) / 1000, end: (p.source_end_ms || 0) / 1000 })
       } else {
-        const cached = config.voice === 'male'
-          ? (p.polly_audio_url_male || p.polly_audio_url_female)
-          : (p.polly_audio_url_female || p.polly_audio_url_male)
+        const cached = p.polly_audio_url_female
         if (cached) descriptors.push({ id: p.id, text: p.text, url: cached, isSegment: false })
         else needGen.push(p)
       }
@@ -345,7 +332,7 @@ function PlayerScreen({ config, onEnd }) {
       for (let i = 0; i < needGen.length; i++) {
         if (cancelledRef.current) return []
         try {
-          const { audio_url } = await generatePollyAudio(needGen[i].id, config.voice, token)
+          const { audio_url } = await generatePhraseAudio(needGen[i].id, token)
           descriptors.push({ id: needGen[i].id, text: needGen[i].text, url: audio_url, isSegment: false })
         } catch (e) { console.error('zen generate audio failed', needGen[i].id, e) }
         if (showProgress) setProgress({ done: i + 1, total: needGen.length })

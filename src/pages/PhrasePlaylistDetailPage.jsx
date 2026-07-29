@@ -1,15 +1,13 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { getPhrasePlaylist, logPhraseReview, ratePhrase, setPhrasePlaylistFavorite, generatePollyAudio, addPhraseVocabulary, getPhraseVocabularyInfo } from '../api/phrases'
+import { getPhrasePlaylist, logPhraseReview, ratePhrase, setPhrasePlaylistFavorite, generatePhraseAudio, generatePollyAudio, addPhraseVocabulary, getPhraseVocabularyInfo } from '../api/phrases'
 import PhrasePlaylistShareModal from '../components/PhrasePlaylistShareModal'
 
 const LANG_LABELS = { en: 'English', pt: 'Português' }
 const LANG_FLAGS  = { en: '🇺🇸', pt: '🇧🇷' }
-const VOICE_NAMES = {
-  en: { female: 'Joanna',  male: 'Matthew' },
-  pt: { female: 'Camila',  male: 'Thiago'  },
-}
+// Single ElevenLabs voice per language (female).
+const VOICE_NAMES = { en: 'Hope', pt: 'Ana Dias' }
 
 const SORT_OPTIONS = [
   { value: 'playlist',       label: '📋 Playlist order' },
@@ -60,7 +58,7 @@ export default function PhrasePlaylistDetailPage() {
   const [playlist, setPlaylist] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [sortBy, setSortBy] = useState('playlist')
+  const [sortBy, setSortBy] = useState('random')
   const [sessionSize, setSessionSize] = useState(() => {
     try {
       const v = localStorage.getItem('phrase.sessionSize')
@@ -72,8 +70,8 @@ export default function PhrasePlaylistDetailPage() {
   const [deck, setDeck] = useState([])
   const [index, setIndex] = useState(0)
   const [revealed, setRevealed] = useState(false)
-  const [pollyPlaying, setPollyPlaying] = useState(null) // 'female' | 'male' | null
-  const [pollyLoading, setPollyLoading] = useState(null) // 'female' | 'male' | null
+  const [pollyPlaying, setPollyPlaying] = useState(null) // 'audio' | 'story' | null
+  const [pollyLoading, setPollyLoading] = useState(false)
   const [currentAudio, setCurrentAudio] = useState(null)
   const [sessionReviews, setSessionReviews] = useState(0)
   const [lastRatingResult, setLastRatingResult] = useState(null)
@@ -323,20 +321,20 @@ export default function PhrasePlaylistDetailPage() {
   useEffect(() => { return stopAudio }, [stopAudio])
   useEffect(() => { stopAudio() }, [index, groupFilterId, sortBy, stopAudio])
 
-  const playPollyVoice = useCallback(async (gender) => {
+  const playPhraseAudio = useCallback(async () => {
     if (!current) return
     stopAudio()
-    const cached = gender === 'male' ? current.polly_audio_url_male : current.polly_audio_url_female
+    const cached = current.polly_audio_url_female
 
     const playURL = (url) => {
       const audio = new Audio(url)
       setCurrentAudio(audio)
-      audio.onplay = () => setPollyPlaying(gender)
+      audio.onplay = () => setPollyPlaying('audio')
       audio.onended = () => { setPollyPlaying(null); setCurrentAudio(null) }
       audio.onerror = () => { setPollyPlaying(null); setCurrentAudio(null) }
       audio.play().catch(err => {
         // AbortError is expected when we intentionally interrupt with pause() — ignore it.
-        if (err && err.name !== 'AbortError') console.error('Polly playback:', err)
+        if (err && err.name !== 'AbortError') console.error('Phrase audio playback:', err)
         setPollyPlaying(null)
         setCurrentAudio(null)
       })
@@ -344,20 +342,20 @@ export default function PhrasePlaylistDetailPage() {
 
     if (cached) { playURL(cached); return }
 
-    setPollyLoading(gender)
+    setPollyLoading(true)
     try {
-      const { audio_url } = await generatePollyAudio(current.id, gender, token)
+      const { audio_url } = await generatePhraseAudio(current.id, token)
       // Update the current phrase's URL directly on the deck. We deliberately don't
       // touch `playlist` state — mutating it would trigger a deck rebuild that reshuffles
       // random/SRS orderings, making the "next" phrase appear.
       setDeck(prev => prev.map(p => p.id === current.id
-        ? { ...p, ...(gender === 'male' ? { polly_audio_url_male: audio_url } : { polly_audio_url_female: audio_url }) }
+        ? { ...p, polly_audio_url_female: audio_url }
         : p))
       playURL(audio_url)
     } catch (err) {
-      alert(`Polly audio failed: ${err.message}`)
+      alert(`Audio failed: ${err.message}`)
     } finally {
-      setPollyLoading(null)
+      setPollyLoading(false)
     }
   }, [current, token, stopAudio])
 
@@ -440,15 +438,14 @@ export default function PhrasePlaylistDetailPage() {
       }
       if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); setRevealed(r => !r) }
       else if (current?.source_audio_url) {
-        // Story-linked phrase: F/M/P all play the single story-audio segment (no Polly).
-        if (['f', 'm', 'p'].includes(e.key.toLowerCase())) playStorySegment()
+        // Story-linked phrase: F/P play the single story-audio segment.
+        if (['f', 'p'].includes(e.key.toLowerCase())) playStorySegment()
       }
-      else if (e.key.toLowerCase() === 'f' && current) { playPollyVoice('female') }
-      else if (e.key.toLowerCase() === 'm' && current) { playPollyVoice('male') }
+      else if (['f', 'p'].includes(e.key.toLowerCase()) && current) { playPhraseAudio() }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [goNext, goPrev, rate, playPollyVoice, playStorySegment, current, isSRS])
+  }, [goNext, goPrev, rate, playPhraseAudio, playStorySegment, current, isSRS])
 
   function handleLogout() {
     logout()
@@ -756,35 +753,26 @@ export default function PhrasePlaylistDetailPage() {
                       <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Story audio</span>
                     </div>
                   ) : (
-                  /* Two Polly voices — female + male — with per-language voice names */
-                  <div className="flex items-center gap-6 mb-6">
-                    {['female', 'male'].map(gender => {
-                      const cached = gender === 'male' ? current.polly_audio_url_male : current.polly_audio_url_female
-                      const loading = pollyLoading === gender
-                      const playing = pollyPlaying === gender
-                      const voiceName = VOICE_NAMES[playlist.language]?.[gender] || (gender === 'male' ? 'Male' : 'Female')
-                      const emoji = gender === 'male' ? '👨' : '👩'
-                      const activeStyle = gender === 'male'
-                        ? 'bg-sky-600 border-sky-600'
-                        : 'bg-pink-500 border-pink-500'
-                      const idleStyle = gender === 'male'
-                        ? 'bg-white border-sky-200 text-sky-600 hover:bg-sky-50 hover:border-sky-400'
-                        : 'bg-white border-pink-200 text-pink-600 hover:bg-pink-50 hover:border-pink-400'
+                  /* Single ElevenLabs voice (female: Hope for en, Ana Dias for pt) */
+                  <div className="flex items-center justify-center mb-6">
+                    {(() => {
+                      const cached = current.polly_audio_url_female
+                      const voiceName = VOICE_NAMES[playlist.language] || 'Voice'
                       return (
-                        <div key={gender} className="flex flex-col items-center gap-1">
+                        <div className="flex flex-col items-center gap-1">
                           <button
-                            onClick={() => playPollyVoice(gender)}
-                            disabled={loading}
-                            title={`${voiceName} — ${gender === 'male' ? 'M' : 'F'} key`}
-                            className={`w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-sm border-2 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 ${playing ? `${activeStyle} text-white animate-pulse` : idleStyle}`}
+                            onClick={playPhraseAudio}
+                            disabled={pollyLoading}
+                            title={`${voiceName} — F key`}
+                            className={`w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-sm border-2 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 ${pollyPlaying === 'audio' ? 'bg-pink-500 border-pink-500 text-white animate-pulse' : 'bg-white border-pink-200 text-pink-600 hover:bg-pink-50 hover:border-pink-400'}`}
                           >
-                            {loading ? (
+                            {pollyLoading ? (
                               <svg className="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24">
                                 <circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/>
                                 <path className="opacity-90" d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
                               </svg>
                             ) : (
-                              <span className="text-2xl">{emoji}</span>
+                              <span className="text-2xl">🔊</span>
                             )}
                           </button>
                           <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider flex items-center gap-1">
@@ -793,7 +781,7 @@ export default function PhrasePlaylistDetailPage() {
                           </span>
                         </div>
                       )
-                    })}
+                    })()}
                   </div>
                   )}
 
@@ -895,8 +883,8 @@ export default function PhrasePlaylistDetailPage() {
 
                 <p className="text-[11px] text-stone-300 text-center mt-4">
                   {isSRS
-                    ? 'Tip: reveal · 1=Again · 2=Hard · 3=Good · 4=Easy · F=female voice · M=male voice'
-                    : 'Tip: ← → navigate · space to reveal · F=female voice · M=male voice'}
+                    ? 'Tip: reveal · 1=Again · 2=Hard · 3=Good · 4=Easy · F=play audio'
+                    : 'Tip: ← → navigate · space to reveal · F=play audio'}
                 </p>
               </>
             )}
