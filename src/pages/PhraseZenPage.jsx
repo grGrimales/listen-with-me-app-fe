@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { listPhrasePlaylists, getPhrasePlaylist, generatePhraseAudio, logPhraseZenListen } from '../api/phrases'
 import { listStoryPhrasePlaylists } from '../api/stories'
+import GroupMultiSelect from '../components/GroupMultiSelect'
 
 // ── Config options ────────────────────────────────────────────────────────────
 const ORDER_OPTIONS = [
@@ -44,6 +45,11 @@ function SetupScreen({ onStart, initialPlaylistId }) {
   const [loading, setLoading] = useState(true)
   const [playlistId, setPlaylistId] = useState(initialPlaylistId || null)
 
+  // Groups of the selected playlist. `groupIds` empty = all groups (the default).
+  const [groups, setGroups] = useState([])
+  const [groupsLoading, setGroupsLoading] = useState(false)
+  const [groupIds, setGroupIds] = useState([])
+
   const [order, setOrder]     = useState('least_heard')
   const [count, setCount]     = useState(10)
   const [repeats, setRepeats] = useState(2)
@@ -59,6 +65,24 @@ function SetupScreen({ onStart, initialPlaylistId }) {
       .finally(() => setLoading(false))
   }, [token])
 
+  // Load the selected playlist's groups so they can be filtered before starting.
+  // Selecting another playlist resets the filter back to "all groups".
+  useEffect(() => {
+    setGroups([])
+    setGroupIds([])
+    if (!playlistId) return
+    let cancelled = false
+    setGroupsLoading(true)
+    getPhrasePlaylist(playlistId, token)
+      .then(pl => {
+        if (cancelled) return
+        setGroups((pl.groups || []).map(g => ({ id: g.id, name: g.name, count: (g.phrases || []).length })))
+      })
+      .catch(() => { if (!cancelled) setGroups([]) })
+      .finally(() => { if (!cancelled) setGroupsLoading(false) })
+    return () => { cancelled = true }
+  }, [playlistId, token])
+
   const allById = {}
   normal.forEach(p => { allById[p.id] = { id: p.id, name: p.name, type: 'normal' } })
   fromStories.forEach(p => { allById[p.id] = { id: p.id, name: p.name, type: 'story' } })
@@ -67,7 +91,7 @@ function SetupScreen({ onStart, initialPlaylistId }) {
   function handleStart() {
     if (!playlistId) return
     onStart({
-      playlistId, order, count, repeats, pauseMs: Math.round(pause * 1000),
+      playlistId, groupIds, order, count, repeats, pauseMs: Math.round(pause * 1000),
       sessionMode, timeMs: sessionMode === 'time' ? minutes * 60000 : 0,
     })
   }
@@ -132,6 +156,30 @@ function SetupScreen({ onStart, initialPlaylistId }) {
             </div>
           )}
         </section>
+
+        {/* Groups of the selected playlist — all of them unless you narrow it down */}
+        {playlistId && (groupsLoading || groups.length > 0) && (
+          <section className="w-full">
+            <label className="block text-xs font-bold uppercase tracking-widest text-stone-500 mb-3">Groups</label>
+            {groupsLoading ? (
+              <p className="text-sm text-stone-600">Loading groups…</p>
+            ) : (
+              <>
+                <GroupMultiSelect
+                  groups={groups}
+                  value={groupIds}
+                  onChange={setGroupIds}
+                  variant="dark"
+                />
+                <p className="text-[11px] text-stone-600 mt-2">
+                  {groupIds.length === 0
+                    ? 'Listening to every group — search and pick one or more to narrow it down.'
+                    : `Listening to ${groupIds.length} of ${groups.length} groups.`}
+                </p>
+              </>
+            )}
+          </section>
+        )}
 
         {/* Order */}
         <section className="w-full">
@@ -308,7 +356,11 @@ function PlayerScreen({ config, onEnd }) {
   // e.g. "least heard" re-picks a different set as zen counts update).
   const buildDescriptors = useCallback(async (showProgress) => {
     const pl = await getPhrasePlaylist(config.playlistId, token)
-    let phrases = (pl.groups || []).flatMap(g => g.phrases || []).filter(p => p && p.text)
+    // Empty groupIds = every group. Applied on each rebuild so time-mode cycles keep the filter.
+    const picked = config.groupIds && config.groupIds.length > 0
+      ? (pl.groups || []).filter(g => config.groupIds.includes(g.id))
+      : (pl.groups || [])
+    let phrases = picked.flatMap(g => g.phrases || []).filter(p => p && p.text)
     phrases = sortPhrases(phrases, config.order)
     if (config.count > 0) phrases = phrases.slice(0, config.count)
     if (phrases.length === 0) return []

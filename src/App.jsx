@@ -22,6 +22,7 @@ import PhraseVocabularyPage from './pages/PhraseVocabularyPage'
 import StoryPhrasePlaylistsPage from './pages/StoryPhrasePlaylistsPage'
 import PhraseZenPage from './pages/PhraseZenPage'
 import PhraseZenStatsPage from './pages/PhraseZenStatsPage'
+import PhraseEvaluationPage from './pages/PhraseEvaluationPage'
 
 export default function App() {
   return (
@@ -171,6 +172,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <PhrasePlaylistManagePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/phrases/:id/evaluation"
+            element={
+              <ProtectedRoute>
+                <PhraseEvaluationPage />
               </ProtectedRoute>
             }
           />

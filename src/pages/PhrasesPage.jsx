@@ -151,6 +151,14 @@ export default function PhrasesPage() {
               >
                 <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
                   <Link
+                    to={`/phrases/${p.id}/evaluation`}
+                    onClick={e => e.stopPropagation()}
+                    title="Writing evaluation — type the phrase from Spanish"
+                    className="text-stone-300 hover:text-indigo-600 transition"
+                  >
+                    <span className="text-lg leading-none">✍️</span>
+                  </Link>
+                  <Link
                     to={`/phrases/zen?playlist=${p.id}`}
                     onClick={e => e.stopPropagation()}
                     title="Zen mode — relax and listen"

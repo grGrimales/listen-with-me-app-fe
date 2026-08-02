@@ -64,6 +64,25 @@ export function ratePhrase(phraseId, quality, token) {
   })
 }
 
+// Writing evaluation: the server compares the answer and stores the attempt.
+// Returns { is_correct, expected, stats }.
+export function evaluatePhrase(phraseId, userAnswer, playlistId, token) {
+  return request(`/api/phrases/${phraseId}/evaluate`, token, {
+    method: 'POST',
+    body: JSON.stringify({ user_answer: userAnswer, playlist_id: playlistId }),
+  })
+}
+
+// Everything the user has typed for this phrase, newest first.
+export function getPhraseEvaluationHistory(phraseId, token, limit = 50) {
+  return request(`/api/phrases/${phraseId}/evaluation-history?limit=${limit}`, token)
+}
+
+// Per-phrase hit/miss totals across the playlist.
+export function getPlaylistEvaluationStats(playlistId, token) {
+  return request(`/api/phrase-playlists/${playlistId}/evaluation-stats`, token)
+}
+
 export function updatePhrase(phraseId, data, token) {
   return request(`/api/phrases/${phraseId}`, token, {
     method: 'PUT',

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getPhrasePlaylist, logPhraseReview, ratePhrase, setPhrasePlaylistFavorite, generatePhraseAudio, generatePollyAudio, addPhraseVocabulary, getPhraseVocabularyInfo } from '../api/phrases'
 import PhrasePlaylistShareModal from '../components/PhrasePlaylistShareModal'
+import GroupMultiSelect from '../components/GroupMultiSelect'
 
 const LANG_LABELS = { en: 'English', pt: 'Português' }
 const LANG_FLAGS  = { en: '🇺🇸', pt: '🇧🇷' }
@@ -70,7 +71,8 @@ export default function PhrasePlaylistDetailPage() {
     } catch { return 0 }
   })
   const [displayMode, setDisplayMode] = useState('audio')
-  const [groupFilterId, setGroupFilterId] = useState(null)
+  // Selected groups. Empty = all groups (the default).
+  const [groupFilterIds, setGroupFilterIds] = useState([])
   const [deck, setDeck] = useState([])
   const [index, setIndex] = useState(0)
   const [revealed, setRevealed] = useState(false)
@@ -93,10 +95,19 @@ export default function PhrasePlaylistDetailPage() {
   const [addingVocab, setAddingVocab] = useState(false)
 
   const isSRS = sortBy === 'srs'
+  // Stable primitive so effects only re-run when the selection actually changes.
+  const groupFilterKey = groupFilterIds.join(',')
+
+  // Shape the groups for the searchable multi-select.
+  const groupOptions = useMemo(
+    () => (playlist?.groups || []).map(g => ({ id: g.id, name: g.name, count: g.phrases.length })),
+    [playlist?.groups]
+  )
 
   useEffect(() => {
     setLoading(true)
     setError('')
+    setGroupFilterIds([])
     getPhrasePlaylist(id, token)
       .then(setPlaylist)
       .catch(err => setError(err.message))
@@ -118,8 +129,8 @@ export default function PhrasePlaylistDetailPage() {
   // Build a flat list of all phrases (respecting group filter), then sort per selected mode.
   useEffect(() => {
     if (!playlist) return
-    const groups = groupFilterId
-      ? playlist.groups.filter(g => g.id === groupFilterId)
+    const groups = groupFilterIds.length > 0
+      ? playlist.groups.filter(g => groupFilterIds.includes(g.id))
       : playlist.groups
     let flat = groups.flatMap(g =>
       g.phrases.map(p => ({ ...p, groupName: g.name, groupId: g.id }))
@@ -161,7 +172,8 @@ export default function PhrasePlaylistDetailPage() {
     setDeck(flat)
     // Depend on `playlist?.groups` (not `playlist`) so incidental playlist mutations —
     // toggling favorite, receiving updated metadata — don't reshuffle random/SRS decks.
-  }, [playlist?.groups, groupFilterId, sortBy, sessionSize])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playlist?.groups, groupFilterKey, sortBy, sessionSize])
 
   // Reset position only when the filter, sort, or playlist itself changes —
   // not when we just cache an audio URL on the current playlist.
@@ -169,7 +181,7 @@ export default function PhrasePlaylistDetailPage() {
     setIndex(0)
     setRevealed(false)
     setLastRatingResult(null)
-  }, [groupFilterId, sortBy, playlist?.id, sessionSize])
+  }, [groupFilterKey, sortBy, playlist?.id, sessionSize])
 
   useEffect(() => {
     try { localStorage.setItem('phrase.sessionSize', String(sessionSize)) } catch { /* noop */ }
@@ -190,7 +202,7 @@ export default function PhrasePlaylistDetailPage() {
     setSelection(text)
   }, [current])
 
-  useEffect(() => { setSelection('') }, [index, groupFilterId, sortBy])
+  useEffect(() => { setSelection('') }, [index, groupFilterKey, sortBy])
 
   // Build a memoized regex from vocab words (case-insensitive, longest first).
   // Uses Unicode word-boundary lookarounds so "table" doesn't match inside "comfortable",
@@ -334,7 +346,7 @@ export default function PhrasePlaylistDetailPage() {
     setPollyPlaying(null)
   }, [])
   useEffect(() => { return stopAudio }, [stopAudio])
-  useEffect(() => { stopAudio() }, [index, groupFilterId, sortBy, stopAudio])
+  useEffect(() => { stopAudio() }, [index, groupFilterKey, sortBy, stopAudio])
 
   // Returns the phrase's audio URL, generating (and caching on the deck) it on first use.
   // We deliberately don't touch `playlist` state — mutating it would trigger a deck rebuild
@@ -488,6 +500,9 @@ export default function PhrasePlaylistDetailPage() {
 
   useEffect(() => {
     function onKey(e) {
+      // Don't hijack typing in the group search box (or any other field).
+      const el = e.target
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return
       if (isSRS) {
         if (e.key >= '1' && e.key <= '4') {
           const q = parseInt(e.key, 10) - 1
@@ -530,7 +545,9 @@ export default function PhrasePlaylistDetailPage() {
   // SRS caught-up state: playlist has phrases but none are due
   const srsCaughtUp = useMemo(() => {
     if (!isSRS || !playlist) return null
-    const groups = groupFilterId ? playlist.groups.filter(g => g.id === groupFilterId) : playlist.groups
+    const groups = groupFilterIds.length > 0
+      ? playlist.groups.filter(g => groupFilterIds.includes(g.id))
+      : playlist.groups
     const all = groups.flatMap(g => g.phrases)
     if (all.length === 0) return null
     if (deck.length > 0) return null
@@ -540,7 +557,8 @@ export default function PhrasePlaylistDetailPage() {
       .map(p => new Date(p.srs.next_review_at).getTime())
       .sort((a, b) => a - b)[0]
     return { nextDueAt: nextDue ? new Date(nextDue) : null }
-  }, [isSRS, playlist, groupFilterId, deck.length])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSRS, playlist, groupFilterKey, deck.length])
 
   return (
     <div className="min-h-screen bg-stone-50 flex flex-col">
@@ -626,6 +644,13 @@ export default function PhrasePlaylistDetailPage() {
                       </span>
                     )
                   )}
+                  <Link
+                    to={`/phrases/${playlist.id}/evaluation`}
+                    title="Writing evaluation — type the phrase from Spanish"
+                    className="text-xs font-bold text-stone-500 hover:text-indigo-700 border border-stone-200 hover:border-indigo-400 rounded-lg px-3 py-1.5 transition"
+                  >
+                    ✍️ Evaluate
+                  </Link>
                   {(playlist.role === 'owner' || playlist.role === 'editor') && (
                     <Link
                       to={`/phrases/${playlist.id}/manage`}
@@ -727,23 +752,20 @@ export default function PhrasePlaylistDetailPage() {
               )}
             </div>
 
-            {playlist.groups.length > 1 && (
-              <div className="mb-6 flex flex-wrap gap-2">
-                <button
-                  onClick={() => setGroupFilterId(null)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${!groupFilterId ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-500 border-stone-200 hover:border-stone-400'}`}
-                >
-                  All groups
-                </button>
-                {playlist.groups.map(g => (
-                  <button
-                    key={g.id}
-                    onClick={() => setGroupFilterId(g.id)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${groupFilterId === g.id ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-500 border-stone-200 hover:border-stone-400'}`}
-                  >
-                    {g.name} <span className="opacity-60">({g.phrases.length})</span>
-                  </button>
-                ))}
+            {groupOptions.length > 0 && (
+              <div className="mb-6">
+                <span className="block text-[11px] text-stone-400 font-semibold uppercase tracking-wider mb-1.5">Groups:</span>
+                <GroupMultiSelect
+                  groups={groupOptions}
+                  value={groupFilterIds}
+                  onChange={setGroupFilterIds}
+                  variant="light"
+                />
+                <p className="text-[11px] text-stone-400 mt-1.5">
+                  {groupFilterIds.length === 0
+                    ? 'Reviewing all groups — search and pick one or more to narrow the session.'
+                    : `Reviewing ${groupFilterIds.length} of ${groupOptions.length} groups.`}
+                </p>
               </div>
             )}
 
