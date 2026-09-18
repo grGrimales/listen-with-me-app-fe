@@ -7,7 +7,10 @@ async function request(path, options = {}) {
     headers: { 'Content-Type': 'application/json', ...options.headers },
     ...options,
   })
-  const data = await res.json()
+  let data
+  const ct = res.headers.get('content-type')
+  if (ct && ct.includes('application/json')) data = await res.json()
+  else data = { error: (await res.text()) || res.statusText }
   if (!res.ok) throw new Error(data.error || 'Something went wrong')
   return data
 }
