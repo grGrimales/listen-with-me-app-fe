@@ -330,6 +330,8 @@ export default function PhrasePlaylistDetailPage() {
   const segStopRef = useRef(null)
   // Holds the running 20x-repeat loop so any stop can cancel it.
   const repeatStateRef = useRef({ cancelled: true, timer: null, audio: null })
+  // {url, audio} of the story mp3 currently loaded, reused across segment plays.
+  const storyAudioRef = useRef(null)
 
   const stopAudio = useCallback(() => {
     if (segStopRef.current) { cancelAnimationFrame(segStopRef.current); segStopRef.current = null }
@@ -387,69 +389,36 @@ export default function PhrasePlaylistDetailPage() {
     })
   }, [current, stopAudio, ensureAudioURL])
 
-  // Repeat the phrase REPEAT_TIMES with a short pause between plays. Clicking the button
-  // while running stops it (toggle); clicking again restarts the count. Any other audio
-  // action or navigating to the next phrase cancels it via stopAudio().
-  const startRepeat = useCallback(async () => {
-    if (!current) return
-    if (repeatPlaying) { stopAudio(); return } // toggle off
-    stopAudio()                                 // interrupt any single playback
-    const url = await ensureAudioURL()
-    if (!url) return
-    const st = repeatStateRef.current
-    st.cancelled = false
-    setRepeatCount(0)
-    setRepeatPlaying(true)
-    let count = 0
-    const playOnce = () => {
-      if (st.cancelled) return
-      const audio = new Audio(url)
-      st.audio = audio
-      setCurrentAudio(audio)
-      audio.onended = () => {
-        if (st.cancelled) return
-        count += 1
-        setRepeatCount(count)
-        if (count >= REPEAT_TIMES) {
-          st.cancelled = true
-          st.audio = null
-          setCurrentAudio(null)
-          setRepeatPlaying(false)
-          return
-        }
-        st.timer = setTimeout(() => { if (!st.cancelled) playOnce() }, REPEAT_PAUSE_MS)
-      }
-      audio.onerror = () => {
-        st.cancelled = true; st.audio = null
-        setCurrentAudio(null); setRepeatPlaying(false)
-      }
-      audio.play().catch(err => {
-        if (err && err.name !== 'AbortError') {
-          console.error('Repeat playback:', err)
-          st.cancelled = true; setRepeatPlaying(false); setCurrentAudio(null)
-        }
-      })
-    }
-    playOnce()
-  }, [current, repeatPlaying, stopAudio, ensureAudioURL])
-
-  // Play the story-audio segment for a story-linked phrase: reuses the story's own
-  // audio, playing only [source_start_ms, source_end_ms]. Stops precisely via rAF.
-  const playStorySegment = useCallback(() => {
+  // Plays the story-audio segment once: the story's own narration, bounded to
+  // [source_start_ms, source_end_ms] via rAF. `onEnd` fires only when the segment
+  // finishes on its own — never when stopAudio() cancels it — so the repeat loop
+  // can chain plays without a cancelled run queueing the next one.
+  const playStorySegmentOnce = useCallback((onEnd) => {
     if (!current || !current.source_audio_url) return
-    stopAudio()
-    const audio = new Audio(current.source_audio_url)
+    // Reuse the element across plays: the segment lives inside the story's full mp3,
+    // so a fresh Audio() per repetition would re-buffer the whole file 20 times.
+    const cached = storyAudioRef.current
+    const audio = cached && cached.url === current.source_audio_url
+      ? cached.audio
+      : new Audio(current.source_audio_url)
+    storyAudioRef.current = { url: current.source_audio_url, audio }
     const startSec = (current.source_start_ms || 0) / 1000
     const endSec = (current.source_end_ms || 0) / 1000
     setCurrentAudio(audio)
 
+    const finish = () => {
+      setPollyPlaying(null)
+      setCurrentAudio(null)
+      segStopRef.current = null
+      if (onEnd) onEnd()
+    }
+
     const tick = () => {
+      // Paused before reaching endSec = cancelled by stopAudio(): don't chain.
       if (audio.paused) { segStopRef.current = null; return }
       if (endSec > 0 && audio.currentTime >= endSec) {
         audio.pause()
-        setPollyPlaying(null)
-        setCurrentAudio(null)
-        segStopRef.current = null
+        finish()
         return
       }
       segStopRef.current = requestAnimationFrame(tick)
@@ -462,16 +431,75 @@ export default function PhrasePlaylistDetailPage() {
         segStopRef.current = requestAnimationFrame(tick)
       }).catch(err => {
         if (err && err.name !== 'AbortError') console.error('Story segment playback:', err)
-        setPollyPlaying(null)
-        setCurrentAudio(null)
+        stopAudio() // also cancels a running repeat loop
       })
     }
 
-    audio.onended = () => { setPollyPlaying(null); setCurrentAudio(null) }
-    audio.onerror = () => { setPollyPlaying(null); setCurrentAudio(null) }
+    audio.onended = finish              // the file ended before endSec
+    audio.onerror = () => stopAudio()
     if (audio.readyState >= 1) startAndBound()
     else audio.addEventListener('loadedmetadata', startAndBound, { once: true })
   }, [current, stopAudio])
+
+  // Single play of the story segment (🎧 button / F key).
+  const playStorySegment = useCallback(() => {
+    stopAudio()
+    playStorySegmentOnce()
+  }, [stopAudio, playStorySegmentOnce])
+
+  // Repeat the phrase REPEAT_TIMES with a short pause between plays. Clicking the button
+  // while running stops it (toggle); clicking again restarts the count. Any other audio
+  // action or navigating to the next phrase cancels it via stopAudio().
+  // Story-linked phrases have no audio file of their own, so they loop the story
+  // segment instead of generating a separate voice.
+  const startRepeat = useCallback(async () => {
+    if (!current) return
+    if (repeatPlaying) { stopAudio(); return } // toggle off
+    stopAudio()                                 // interrupt any single playback
+
+    const isSegment = !!current.source_audio_url
+    const url = isSegment ? null : await ensureAudioURL()
+    if (!isSegment && !url) return
+
+    const st = repeatStateRef.current
+    st.cancelled = false
+    setRepeatCount(0)
+    setRepeatPlaying(true)
+    let count = 0
+    // One play finished: count it and queue the next one (or stop at REPEAT_TIMES).
+    const advance = () => {
+      if (st.cancelled) return
+      count += 1
+      setRepeatCount(count)
+      if (count >= REPEAT_TIMES) {
+        st.cancelled = true
+        st.audio = null
+        setCurrentAudio(null)
+        setRepeatPlaying(false)
+        return
+      }
+      st.timer = setTimeout(() => { if (!st.cancelled) playOnce() }, REPEAT_PAUSE_MS)
+    }
+    const playOnce = () => {
+      if (st.cancelled) return
+      if (isSegment) { playStorySegmentOnce(advance); return }
+      const audio = new Audio(url)
+      st.audio = audio
+      setCurrentAudio(audio)
+      audio.onended = advance
+      audio.onerror = () => {
+        st.cancelled = true; st.audio = null
+        setCurrentAudio(null); setRepeatPlaying(false)
+      }
+      audio.play().catch(err => {
+        if (err && err.name !== 'AbortError') {
+          console.error('Repeat playback:', err)
+          st.cancelled = true; setRepeatPlaying(false); setCurrentAudio(null)
+        }
+      })
+    }
+    playOnce()
+  }, [current, repeatPlaying, stopAudio, ensureAudioURL, playStorySegmentOnce])
 
   // Play a saved vocab word's audio. Doesn't log a review — pure playback.
   const playVocabWord = useCallback(async (word, gender = 'female') => {
@@ -514,11 +542,11 @@ export default function PhrasePlaylistDetailPage() {
         else if (e.key === 'ArrowLeft') goPrev()
       }
       if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); setRevealed(r => !r) }
-      else if (current?.source_audio_url) {
-        // Story-linked phrase: F/P play the single story-audio segment.
-        if (['f', 'p'].includes(e.key.toLowerCase())) playStorySegment()
+      else if (['f', 'p'].includes(e.key.toLowerCase()) && current) {
+        // Story-linked phrases play their story-audio segment; the rest, their own voice.
+        if (current.source_audio_url) playStorySegment()
+        else playPhraseAudio()
       }
-      else if (['f', 'p'].includes(e.key.toLowerCase()) && current) { playPhraseAudio() }
       else if (e.key.toLowerCase() === 'r' && current) { startRepeat() }
     }
     window.addEventListener('keydown', onKey)
@@ -827,15 +855,36 @@ export default function PhrasePlaylistDetailPage() {
 
                   {/* Story-linked phrase: single audio = the story's own narration segment */}
                   {current.source_audio_url ? (
-                    <div className="flex flex-col items-center gap-1 mb-6">
-                      <button
-                        onClick={playStorySegment}
-                        title="Play the story audio"
-                        className={`w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-sm border-2 active:scale-95 ${pollyPlaying === 'story' ? 'bg-emerald-600 border-emerald-600 text-white animate-pulse' : 'bg-white border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-400'}`}
-                      >
-                        <span className="text-2xl">🎧</span>
-                      </button>
-                      <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Story audio</span>
+                    <div className="flex items-center justify-center gap-6 mb-6">
+                      {/* Single play */}
+                      <div className="flex flex-col items-center gap-1">
+                        <button
+                          onClick={playStorySegment}
+                          title="Play the story audio — F key"
+                          className={`w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-sm border-2 active:scale-95 ${pollyPlaying === 'story' ? 'bg-emerald-600 border-emerald-600 text-white animate-pulse' : 'bg-white border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-400'}`}
+                        >
+                          <span className="text-2xl">🎧</span>
+                        </button>
+                        <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Story audio</span>
+                      </div>
+
+                      {/* Repeat 20x — loops the same story segment */}
+                      <div className="flex flex-col items-center gap-1">
+                        <button
+                          onClick={startRepeat}
+                          title={`Repetir ${REPEAT_TIMES} veces — R key`}
+                          className={`w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-sm border-2 active:scale-95 ${repeatPlaying ? 'bg-indigo-600 border-indigo-600 text-white animate-pulse' : 'bg-white border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-400'}`}
+                        >
+                          {repeatPlaying ? (
+                            <span className="text-sm font-extrabold">{repeatCount}/{REPEAT_TIMES}</span>
+                          ) : (
+                            <span className="text-2xl">🔁</span>
+                          )}
+                        </button>
+                        <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">
+                          {repeatPlaying ? 'Detener' : `Repetir ${REPEAT_TIMES}×`}
+                        </span>
+                      </div>
                     </div>
                   ) : (
                   /* Single ElevenLabs voice (female: Hope for en, Ana Dias for pt) */
