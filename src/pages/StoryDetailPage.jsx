@@ -1,7 +1,13 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getStory, markStoryAsReviewed, getUserVocabulary, addUserVocabulary, deleteUserVocabulary, reorderUserVocabulary, updateUserLanguage } from '../api/stories'
+
+const NO_REVEALS = new Set()
+
+// Repeat drill for a single paragraph, mirroring the phrase cards.
+const REPEAT_TIMES = 20
+const REPEAT_PAUSE_MS = 600
 
 // ── Theme definitions ────────────────────────────────────────────────────────
 const T = {
@@ -111,6 +117,13 @@ export default function StoryDetailPage() {
   const [showVocabulary, setShowVocabulary] = useState(false)
   const [showImages, setShowImages] = useState(() => localStorage.getItem('rwm_showImages') !== 'false')
   const [wordClickMode, setWordClickMode] = useState(() => localStorage.getItem('rwm_wordClickMode') === 'true')
+  // Recall mode: the paragraph shows only its Spanish translation, and the original
+  // text (plus its pronunciation) stays hidden until you reveal it, paragraph by paragraph.
+  const [recallMode, setRecallMode] = useState(() => localStorage.getItem('rwm_recallMode') !== 'false')
+  const [showPronunciation, setShowPronunciation] = useState(() => localStorage.getItem('rwm_showPronunciation') !== 'false')
+  // Which paragraphs have been revealed, tagged with the story they belong to so a
+  // different story starts covered without resetting state from an effect.
+  const [revealed, setRevealed] = useState({ storyID: null, ids: NO_REVEALS })
   const [theme, setTheme] = useState(() => localStorage.getItem('rwm_theme') || 'light')
   const [fontSize, setFontSize] = useState(() => Number(localStorage.getItem('rwm_fontSize')) || FONT_DEFAULT)
   const [showSettings, setShowSettings] = useState(false)
@@ -135,6 +148,16 @@ export default function StoryDetailPage() {
   useEffect(() => { localStorage.setItem('rwm_fontSize', fontSize) }, [fontSize])
   useEffect(() => { localStorage.setItem('rwm_showImages', showImages) }, [showImages])
   useEffect(() => { localStorage.setItem('rwm_wordClickMode', wordClickMode) }, [wordClickMode])
+  useEffect(() => { localStorage.setItem('rwm_recallMode', recallMode) }, [recallMode])
+  useEffect(() => { localStorage.setItem('rwm_showPronunciation', showPronunciation) }, [showPronunciation])
+
+  const hideAll = useCallback(() => setRevealed({ storyID: null, ids: NO_REVEALS }), [])
+
+  // Toggling the mode starts the recall over, so a re-entry is never pre-answered.
+  const toggleRecallMode = useCallback(() => {
+    setRecallMode(v => !v)
+    hideAll()
+  }, [hideAll])
 
   // Voice-mode state
   const [currentVoice, setCurrentVoice] = useState(null)
@@ -159,6 +182,9 @@ export default function StoryDetailPage() {
   const [paraCurrentTime, setParaCurrentTime] = useState(0)
   const [paraDuration, setParaDuration] = useState(0)
   const [isLooping, setIsLooping] = useState(false)
+  const [repeatParaId, setRepeatParaId] = useState(null)
+  const [repeatLeft, setRepeatLeft] = useState(0)
+
 
   const audioRef = useRef(null)
   const settingsRef = useRef(null)
@@ -166,6 +192,9 @@ export default function StoryDetailPage() {
   const paraDelayRef = useRef(null)
   const paraRefs = useRef({})
   const vocabAudioRef = useRef(null)
+  // The repeat drill owns its own Audio element so it never fights the main player.
+  const repeatAudioRef = useRef(null)
+  const repeatTimerRef = useRef(null)
   const vocabStopRef = useRef(null)
 
   const singlePlayRef = useRef(false)
@@ -757,6 +786,87 @@ export default function StoryDetailPage() {
     ? translationLang
     : (translationLangs.includes('es') ? 'es' : (translationLangs[0] || translationLang))
 
+  // Recall mode needs a translation to show in place of the original text.
+  const hasTranslations = translationLangs.length > 0
+  const recallActive = recallMode && hasTranslations
+  const hasPronunciation = !!story?.paragraphs?.some(p => p.pronunciation_es)
+  const revealedIds = revealed.storyID === story?.id ? revealed.ids : NO_REVEALS
+  const allRevealed = !!story?.paragraphs?.length && story.paragraphs.every(p => revealedIds.has(p.id))
+
+  const revealParagraph = (paraID) => {
+    const next = new Set(revealedIds)
+    next.add(paraID)
+    setRevealed({ storyID: story.id, ids: next })
+  }
+  const stopParaRepeat = () => {
+    if (repeatTimerRef.current) {
+      clearTimeout(repeatTimerRef.current)
+      repeatTimerRef.current = null
+    }
+    if (repeatAudioRef.current) {
+      repeatAudioRef.current.onended = null
+      repeatAudioRef.current.pause()
+      repeatAudioRef.current = null
+    }
+    setRepeatParaId(null)
+    setRepeatLeft(0)
+  }
+
+  const toggleParaRepeat = (p) => {
+    if (repeatParaId === p.id) {
+      stopParaRepeat()
+      return
+    }
+    stopParaRepeat()
+
+    // Silence the main player: two audios at once is never what you want here.
+    if (audioRef.current) audioRef.current.pause()
+    setPlayingParaId(null)
+    setParaIsPlaying(false)
+
+    const audio = new Audio(p.audio_url)
+    repeatAudioRef.current = audio
+    let remaining = REPEAT_TIMES
+    setRepeatParaId(p.id)
+    setRepeatLeft(remaining)
+
+    const playOnce = () => {
+      audio.currentTime = 0
+      audio.play().catch(() => stopParaRepeat())
+    }
+    audio.onended = () => {
+      remaining -= 1
+      setRepeatLeft(remaining)
+      if (remaining <= 0) {
+        stopParaRepeat()
+        return
+      }
+      repeatTimerRef.current = setTimeout(playOnce, REPEAT_PAUSE_MS)
+    }
+    playOnce()
+  }
+
+  // Leaving the story (or the page) must silence a running repeat drill.
+  useEffect(() => () => {
+    if (repeatTimerRef.current) clearTimeout(repeatTimerRef.current)
+    if (repeatAudioRef.current) {
+      repeatAudioRef.current.onended = null
+      repeatAudioRef.current.pause()
+    }
+  }, [id])
+
+  const hideParagraph = (paraID) => {
+    const next = new Set(revealedIds)
+    next.delete(paraID)
+    setRevealed({ storyID: story.id, ids: next })
+  }
+  const revealAll = () => setRevealed({ storyID: story.id, ids: new Set(story.paragraphs.map(p => p.id)) })
+
+  const translationFor = useCallback(
+    (p) => p.translations?.find(t => t.language === effectiveTransLang)?.content || '',
+    [effectiveTransLang]
+  )
+
   // Logic to determine which image to show
   // Default to first paragraph if no active paragraph yet
   const activePara = story?.paragraphs?.find(p => p.id === activeParagraphId) || story?.paragraphs?.[0]
@@ -906,6 +1016,12 @@ export default function StoryDetailPage() {
             {/* Minimal controls visible only on scroll or always in nav for simplicity */}
             <div className={`flex items-center gap-1 transition-all duration-500 ${isSticky ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'}`}>
               <button onClick={() => setShowTranslation(v => !v)} className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs border transition-all ${showTranslation ? c.chipActive : c.chip}`}>🌐</button>
+              {hasTranslations && (
+                <button onClick={toggleRecallMode} title="Recall mode" className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs border transition-all ${recallMode ? c.chipActive : c.chip}`}>🙈</button>
+              )}
+              {hasPronunciation && (
+                <button onClick={() => setShowPronunciation(v => !v)} title="Pronunciation" className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs border transition-all ${showPronunciation ? c.chipActive : c.chip}`}>🗣️</button>
+              )}
               <button onClick={() => setShowVocabulary(v => !v)} className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs border transition-all ${showVocabulary ? c.chipActive : c.chip}`}>📖</button>
               <button onClick={() => setShowImages(v => !v)} className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs border transition-all ${showImages ? c.chipActive : c.chip}`}>🖼️</button>
               {hasWordTimestamps && (
@@ -1013,6 +1129,35 @@ export default function StoryDetailPage() {
                   </button>
                 ))}
               </div>
+            )}
+            {hasTranslations && (
+              <button
+                onClick={toggleRecallMode}
+                title="Show only the translation and reveal the original paragraph by paragraph"
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
+                  recallMode ? c.chipActive : c.chip
+                }`}
+              >
+                🙈 Recall mode
+              </button>
+            )}
+            {recallActive && (
+              <button
+                onClick={() => allRevealed ? hideAll() : revealAll()}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${c.chip}`}
+              >
+                {allRevealed ? '🔒 Hide all' : '👁️ Reveal all'}
+              </button>
+            )}
+            {hasPronunciation && (
+              <button
+                onClick={() => setShowPronunciation(v => !v)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
+                  showPronunciation ? c.chipActive : c.chip
+                }`}
+              >
+                🗣️ Pronunciation
+              </button>
             )}
             <button
               onClick={() => setShowVocabulary(v => !v)}
@@ -1138,6 +1283,10 @@ export default function StoryDetailPage() {
           {story.paragraphs?.map((p, idx) => {
             const isActive = activeParagraphId === p.id
             const isThisParaPlaying = !isVoiceMode && playingParaId === p.id && paraIsPlaying
+
+            // In recall mode the Spanish is the prompt and the original text is the answer.
+            const promptText = recallActive ? translationFor(p) : ''
+            const isHidden = recallActive && !!promptText && !revealedIds.has(p.id)
             
             // Filter user vocab that exists in THIS paragraph
             const vocabInPara = userVocab.filter(v => 
@@ -1151,16 +1300,47 @@ export default function StoryDetailPage() {
                     {(idx + 1).toString().padStart(2, '0')}
                   </span>
 
-                  <p
-                    onClick={() => !wordClickActive && isVoiceMode && handleParagraphClick(p.id)}
-                    style={{ fontSize: `${fontSize}px` }}
-                    className={`flex-1 leading-relaxed font-serif transition-colors duration-300 ${isVoiceMode && !wordClickActive ? 'cursor-pointer' : ''} ${isActive ? c.paraTextActive : c.paraText}`}
-                  >
-                    {wordClickActive ? renderClickableWords(p) : renderHighlightedText(p.content)}
-                  </p>
+                  {isHidden ? (
+                    <p
+                      onClick={() => revealParagraph(p.id)}
+                      title="Click to reveal the English"
+                      style={{ fontSize: `${fontSize}px` }}
+                      className={`flex-1 leading-relaxed font-serif italic cursor-pointer transition-colors duration-300 ${isActive ? c.paraTextActive : c.paraText}`}
+                    >
+                      {promptText}
+                    </p>
+                  ) : (
+                    <p
+                      onClick={() => !wordClickActive && isVoiceMode && handleParagraphClick(p.id)}
+                      style={{ fontSize: `${fontSize}px` }}
+                      className={`flex-1 leading-relaxed font-serif transition-colors duration-300 ${isVoiceMode && !wordClickActive ? 'cursor-pointer' : ''} ${isActive ? c.paraTextActive : c.paraText}`}
+                    >
+                      {wordClickActive ? renderClickableWords(p) : renderHighlightedText(p.content)}
+                    </p>
+                  )}
 
-                  {!isVoiceMode && p.audio_url && (
+                  {isHidden && (
+                    <button
+                      onClick={() => revealParagraph(p.id)}
+                      title="Show the English and its pronunciation"
+                      className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700"
+                    >
+                      👁️ Reveal
+                    </button>
+                  )}
+
+                  {!isHidden && (recallActive || (!isVoiceMode && p.audio_url)) && (
                     <div className="flex flex-col gap-1 flex-shrink-0">
+                      {recallActive && (
+                        <button
+                          onClick={() => hideParagraph(p.id)}
+                          title="Hide the English again"
+                          className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm transition-all border ${c.playBtn}`}
+                        >
+                          🙈
+                        </button>
+                      )}
+                      {!isVoiceMode && p.audio_url && (<>
                       {/* Auto-advance play button */}
                       <button
                         onClick={() => toggleParagraph(p)}
@@ -1176,6 +1356,18 @@ export default function StoryDetailPage() {
                           : <svg className="w-4 h-4 translate-x-px" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" /></svg>
                         }
                       </button>
+                      {/* Repeat this paragraph 20 times */}
+                      <button
+                        onClick={() => toggleParaRepeat(p)}
+                        title={`Play this paragraph ${REPEAT_TIMES} times`}
+                        className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all border ${
+                          repeatParaId === p.id ? 'bg-amber-500 text-white border-amber-500' : c.playBtn
+                        }`}
+                      >
+                        <span className="text-[10px] font-black leading-none">
+                          {repeatParaId === p.id ? repeatLeft : `×${REPEAT_TIMES}`}
+                        </span>
+                      </button>
                       {/* Single-paragraph play button */}
                       <button
                         onClick={() => playSingleParagraph(p)}
@@ -1187,11 +1379,20 @@ export default function StoryDetailPage() {
                         </svg>
                         <span className="text-[9px] font-black leading-none -ml-0.5">1</span>
                       </button>
+                      </>)}
                     </div>
                   )}
                 </div>
 
-                {showTranslation && p.translations?.some(t => t.language === effectiveTransLang) && (
+                {/* Revealing a paragraph is the moment you want the pronunciation, so recall
+                    mode always shows it; outside recall mode the chip decides. */}
+                {!isHidden && (showPronunciation || recallActive) && p.pronunciation_es && (
+                  <p className={`ml-8 mb-3 text-sm italic tracking-wide ${c.transText}`}>
+                    🗣️ {p.pronunciation_es}
+                  </p>
+                )}
+
+                {(showTranslation || (recallActive && !isHidden)) && !isHidden && p.translations?.some(t => t.language === effectiveTransLang) && (
                   <div className={`ml-8 rounded-2xl px-5 py-4 border mb-3 transition-all duration-300 ${isActive ? c.transCardActive : c.transCard}`}>
                     <span className={`text-[10px] font-bold uppercase tracking-widest block mb-2 ${isActive ? c.transLabelActive : c.transLabel}`}>
                       {TRANS_LANG_LABELS[effectiveTransLang] || 'Translation'}
