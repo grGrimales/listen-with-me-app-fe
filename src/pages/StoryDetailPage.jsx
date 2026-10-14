@@ -1405,7 +1405,8 @@ export default function StoryDetailPage() {
                   </div>
                 )}
 
-                {showVocabulary && vocabInPara.length > 0 && (
+                {/* Hidden in recall mode until revealed: the chips would give the answer away. */}
+                {showVocabulary && !isHidden && vocabInPara.length > 0 && (
                   <div className="ml-8 mt-4 flex flex-wrap gap-2 animate-in fade-in slide-in-from-left-2 duration-300">
                     {vocabInPara.map((v) => (
                       <div key={`vocab-item-${v.id}`} className={`group flex items-center overflow-hidden rounded-xl text-sm border shadow-sm transition-all hover:border-emerald-300 ${c.vocabChip} border-emerald-100 bg-emerald-50/30`}>
