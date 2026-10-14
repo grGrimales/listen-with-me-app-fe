@@ -1300,24 +1300,34 @@ export default function StoryDetailPage() {
                     {(idx + 1).toString().padStart(2, '0')}
                   </span>
 
-                  {isHidden ? (
-                    <p
-                      onClick={() => revealParagraph(p.id)}
-                      title="Click to reveal the English"
-                      style={{ fontSize: `${fontSize}px` }}
-                      className={`flex-1 leading-relaxed font-serif italic cursor-pointer transition-colors duration-300 ${isActive ? c.paraTextActive : c.paraText}`}
-                    >
-                      {promptText}
-                    </p>
-                  ) : (
-                    <p
-                      onClick={() => !wordClickActive && isVoiceMode && handleParagraphClick(p.id)}
-                      style={{ fontSize: `${fontSize}px` }}
-                      className={`flex-1 leading-relaxed font-serif transition-colors duration-300 ${isVoiceMode && !wordClickActive ? 'cursor-pointer' : ''} ${isActive ? c.paraTextActive : c.paraText}`}
-                    >
-                      {wordClickActive ? renderClickableWords(p) : renderHighlightedText(p.content)}
-                    </p>
-                  )}
+                  <div className="flex-1">
+                    {isHidden ? (
+                      <p
+                        onClick={() => revealParagraph(p.id)}
+                        title="Click to reveal the English"
+                        style={{ fontSize: `${fontSize}px` }}
+                        className={`leading-relaxed font-serif italic cursor-pointer transition-colors duration-300 ${isActive ? c.paraTextActive : c.paraText}`}
+                      >
+                        {promptText}
+                      </p>
+                    ) : (
+                      <p
+                        onClick={() => !wordClickActive && isVoiceMode && handleParagraphClick(p.id)}
+                        style={{ fontSize: `${fontSize}px` }}
+                        className={`leading-relaxed font-serif transition-colors duration-300 ${isVoiceMode && !wordClickActive ? 'cursor-pointer' : ''} ${isActive ? c.paraTextActive : c.paraText}`}
+                      >
+                        {wordClickActive ? renderClickableWords(p) : renderHighlightedText(p.content)}
+                      </p>
+                    )}
+
+                    {/* Revealing a paragraph is the moment you want the pronunciation, so
+                        recall mode always shows it; outside recall mode the chip decides. */}
+                    {!isHidden && (showPronunciation || recallActive) && p.pronunciation_es && (
+                      <p className={`mt-2 text-sm italic tracking-wide ${c.transText}`}>
+                        🗣️ {p.pronunciation_es}
+                      </p>
+                    )}
+                  </div>
 
                   {isHidden && (
                     <button
@@ -1383,14 +1393,6 @@ export default function StoryDetailPage() {
                     </div>
                   )}
                 </div>
-
-                {/* Revealing a paragraph is the moment you want the pronunciation, so recall
-                    mode always shows it; outside recall mode the chip decides. */}
-                {!isHidden && (showPronunciation || recallActive) && p.pronunciation_es && (
-                  <p className={`ml-8 mb-3 text-sm italic tracking-wide ${c.transText}`}>
-                    🗣️ {p.pronunciation_es}
-                  </p>
-                )}
 
                 {(showTranslation || (recallActive && !isHidden)) && !isHidden && p.translations?.some(t => t.language === effectiveTransLang) && (
                   <div className={`ml-8 rounded-2xl px-5 py-4 border mb-3 transition-all duration-300 ${isActive ? c.transCardActive : c.transCard}`}>
