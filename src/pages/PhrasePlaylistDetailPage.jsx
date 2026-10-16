@@ -14,6 +14,10 @@ const VOICE_NAMES = { en: 'Hope', pt: 'Ana Dias' }
 const REPEAT_TIMES = 20
 const REPEAT_PAUSE_MS = 600
 
+// Focus-expression playback: small margins so the first/last sound isn't clipped.
+const FOCUS_PAD_BEFORE_MS = 40
+const FOCUS_PAD_AFTER_MS = 120
+
 const SORT_OPTIONS = [
   { value: 'playlist',       label: '📋 Playlist order' },
   { value: 'newest',         label: '🆕 Newest first' },
@@ -43,6 +47,23 @@ const RATING_STYLES = {
   orange:  'bg-orange-500 hover:bg-orange-600 border-orange-500',
   emerald: 'bg-emerald-600 hover:bg-emerald-500 border-emerald-600',
   blue:    'bg-blue-500 hover:bg-blue-600 border-blue-500',
+}
+
+// Locates the focus expression in the phrase audio's word timestamps, ignoring case and
+// punctuation ("worth it." matches "worth it"). Returns {startMs, endMs} or null.
+function findFocusSegment(focus, words) {
+  if (!focus || !words?.length) return null
+  const norm = s => (s || '').toLowerCase().replace(/[^\p{L}\p{N}']/gu, '')
+  const tokens = focus.trim().split(/\s+/).map(norm).filter(Boolean)
+  if (tokens.length === 0) return null
+  for (let i = 0; i + tokens.length <= words.length; i++) {
+    let ok = true
+    for (let j = 0; j < tokens.length; j++) {
+      if (norm(words[i + j].word) !== tokens[j]) { ok = false; break }
+    }
+    if (ok) return { startMs: words[i].start_ms, endMs: words[i + tokens.length - 1].end_ms }
+  }
+  return null
 }
 
 // Simple deterministic shuffle
@@ -76,7 +97,7 @@ export default function PhrasePlaylistDetailPage() {
   const [deck, setDeck] = useState([])
   const [index, setIndex] = useState(0)
   const [revealed, setRevealed] = useState(false)
-  const [pollyPlaying, setPollyPlaying] = useState(null) // 'audio' | 'story' | null
+  const [pollyPlaying, setPollyPlaying] = useState(null) // 'audio' | 'story' | 'focus' | null
   const [pollyLoading, setPollyLoading] = useState(false)
   const [repeatPlaying, setRepeatPlaying] = useState(false) // 20x loop active
   const [repeatCount, setRepeatCount] = useState(0)          // plays done in current loop
@@ -350,19 +371,23 @@ export default function PhrasePlaylistDetailPage() {
   useEffect(() => { return stopAudio }, [stopAudio])
   useEffect(() => { stopAudio() }, [index, groupFilterKey, sortBy, stopAudio])
 
-  // Returns the phrase's audio URL, generating (and caching on the deck) it on first use.
+  // Returns the phrase's audio {url, words}, generating (and caching on the deck) it on
+  // first use. `words` are the per-word timestamps (only sent for phrases with focus_text).
   // We deliberately don't touch `playlist` state — mutating it would trigger a deck rebuild
   // that reshuffles random/SRS orderings, making the "next" phrase appear.
-  const ensureAudioURL = useCallback(async () => {
+  const ensureAudio = useCallback(async () => {
     if (!current) return null
-    if (current.polly_audio_url_female) return current.polly_audio_url_female
+    if (current.polly_audio_url_female) {
+      return { url: current.polly_audio_url_female, words: current.word_timestamps || [] }
+    }
     setPollyLoading(true)
     try {
-      const { audio_url } = await generatePhraseAudio(current.id, token)
+      const { audio_url, word_timestamps } = await generatePhraseAudio(current.id, token)
+      const words = word_timestamps || []
       setDeck(prev => prev.map(p => p.id === current.id
-        ? { ...p, polly_audio_url_female: audio_url }
+        ? { ...p, polly_audio_url_female: audio_url, word_timestamps: words }
         : p))
-      return audio_url
+      return { url: audio_url, words }
     } catch (err) {
       alert(`Audio failed: ${err.message}`)
       return null
@@ -370,6 +395,8 @@ export default function PhrasePlaylistDetailPage() {
       setPollyLoading(false)
     }
   }, [current, token])
+
+  const ensureAudioURL = useCallback(async () => (await ensureAudio())?.url || null, [ensureAudio])
 
   const playPhraseAudio = useCallback(async () => {
     if (!current) return
@@ -440,6 +467,76 @@ export default function PhrasePlaylistDetailPage() {
     if (audio.readyState >= 1) startAndBound()
     else audio.addEventListener('loadedmetadata', startAndBound, { once: true })
   }, [current, stopAudio])
+
+  // Plays only the focus expression (current.focus_text) out of the phrase's own audio,
+  // locating it with the per-word timestamps and stopping via rAF (timeupdate's ~250ms
+  // would bleed into the next word). Falls back to the whole phrase when the audio has
+  // no timestamps (e.g. old Polly audio) or the expression can't be matched.
+  const playFocusSegment = useCallback(async () => {
+    if (!current?.focus_text) return
+    stopAudio()
+    const res = await ensureAudio()
+    if (!res) return
+    const seg = findFocusSegment(current.focus_text, res.words)
+    if (!seg) { playPhraseAudio(); return }
+
+    const audio = new Audio(res.url)
+    setCurrentAudio(audio)
+    const startSec = Math.max(0, seg.startMs - FOCUS_PAD_BEFORE_MS) / 1000
+    const endSec = (seg.endMs + FOCUS_PAD_AFTER_MS) / 1000
+    const finish = () => {
+      setPollyPlaying(null)
+      setCurrentAudio(null)
+      segStopRef.current = null
+    }
+    const tick = () => {
+      // Paused before reaching endSec = cancelled by stopAudio().
+      if (audio.paused) { segStopRef.current = null; return }
+      if (audio.currentTime >= endSec) { audio.pause(); finish(); return }
+      segStopRef.current = requestAnimationFrame(tick)
+    }
+    const startAndBound = () => {
+      try { audio.currentTime = startSec } catch { /* ignore */ }
+      audio.play().then(() => {
+        setPollyPlaying('focus')
+        segStopRef.current = requestAnimationFrame(tick)
+      }).catch(err => {
+        if (err && err.name !== 'AbortError') console.error('Focus segment playback:', err)
+        finish()
+      })
+    }
+    audio.onended = finish
+    audio.onerror = finish
+    if (audio.readyState >= 1) startAndBound()
+    else audio.addEventListener('loadedmetadata', startAndBound, { once: true })
+  }, [current, stopAudio, ensureAudio, playPhraseAudio])
+
+  // Renders the phrase with its focus expression as a clickable highlight (plays just
+  // that part); the rest of the text keeps the saved-vocab highlights.
+  function renderPhraseText(text) {
+    const focus = current?.focus_text
+    const at = focus ? text.toLowerCase().indexOf(focus.toLowerCase()) : -1
+    if (at < 0) return renderWithHighlights(text)
+    const end = at + focus.length
+    return (
+      <>
+        {renderWithHighlights(text.slice(0, at))}
+        <button
+          onClick={e => {
+            e.stopPropagation()
+            // If the user is selecting text (to save vocab), don't hijack the click.
+            if (window.getSelection()?.toString().trim()) return
+            playFocusSegment()
+          }}
+          title="Click para escuchar solo esta parte"
+          className={`inline rounded-lg px-1 transition cursor-pointer underline decoration-sky-400 decoration-4 underline-offset-[6px] text-sky-700 hover:bg-sky-100 ${pollyPlaying === 'focus' ? 'bg-sky-100 animate-pulse' : 'bg-sky-50'}`}
+        >
+          {text.slice(at, end)}
+        </button>
+        {renderWithHighlights(text.slice(end))}
+      </>
+    )
+  }
 
   // Single play of the story segment (🎧 button / F key).
   const playStorySegment = useCallback(() => {
@@ -838,7 +935,7 @@ export default function PhrasePlaylistDetailPage() {
                   {/* Front: depends on displayMode */}
                   {displayMode === 'target' && (
                     <p className="text-3xl sm:text-4xl font-bold text-stone-800 leading-tight mb-6">
-                      {renderWithHighlights(current.text)}
+                      {renderPhraseText(current.text)}
                     </p>
                   )}
                   {displayMode === 'spanish' && (
@@ -945,7 +1042,7 @@ export default function PhrasePlaylistDetailPage() {
                   {revealed ? (
                     <div className="w-full border-t border-stone-100 pt-5 mt-1 space-y-2">
                       {displayMode !== 'target' && (
-                        <p className="text-xl sm:text-2xl text-stone-800 font-bold">{renderWithHighlights(current.text)}</p>
+                        <p className="text-xl sm:text-2xl text-stone-800 font-bold">{renderPhraseText(current.text)}</p>
                       )}
                       {displayMode !== 'spanish' && (
                         <p className={`${displayMode === 'audio' ? 'text-lg text-emerald-700' : 'text-xl sm:text-2xl text-emerald-700'} font-semibold`}>

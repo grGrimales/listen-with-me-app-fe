@@ -370,11 +370,11 @@ function PlayerScreen({ config, onEnd }) {
     const needGen = []
     for (const p of phrases) {
       if (p.source_audio_url) {
-        descriptors.push({ id: p.id, text: p.text, url: p.source_audio_url, isSegment: true,
+        descriptors.push({ id: p.id, text: p.text, focus: p.focus_text, url: p.source_audio_url, isSegment: true,
           start: (p.source_start_ms || 0) / 1000, end: (p.source_end_ms || 0) / 1000 })
       } else {
         const cached = p.polly_audio_url_female
-        if (cached) descriptors.push({ id: p.id, text: p.text, url: cached, isSegment: false })
+        if (cached) descriptors.push({ id: p.id, text: p.text, focus: p.focus_text, url: cached, isSegment: false })
         else needGen.push(p)
       }
     }
@@ -385,7 +385,7 @@ function PlayerScreen({ config, onEnd }) {
         if (cancelledRef.current) return []
         try {
           const { audio_url } = await generatePhraseAudio(needGen[i].id, token)
-          descriptors.push({ id: needGen[i].id, text: needGen[i].text, url: audio_url, isSegment: false })
+          descriptors.push({ id: needGen[i].id, text: needGen[i].text, focus: needGen[i].focus_text, url: audio_url, isSegment: false })
         } catch (e) { console.error('zen generate audio failed', needGen[i].id, e) }
         if (showProgress) setProgress({ done: i + 1, total: needGen.length })
       }
@@ -620,7 +620,7 @@ function PlayerScreen({ config, onEnd }) {
         </div>
 
         <div className="text-center w-full">
-          <p className="text-2xl sm:text-3xl font-bold text-stone-100 leading-snug">{current?.text}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-stone-100 leading-snug">{renderFocusText(current?.text, current?.focus)}</p>
         </div>
 
         {/* Repeat dots */}
@@ -692,6 +692,22 @@ export default function PhraseZenPage() {
   if (screen === 'setup') return <SetupScreen initialPlaylistId={initialPlaylistId} onStart={cfg => { setConfig(cfg); setScreen('player') }} />
   if (screen === 'player') return <PlayerScreen config={config} onEnd={n => { setCount(n); setScreen('complete') }} />
   return <CompleteScreen count={count} onRestart={() => { setConfig(null); setScreen('setup') }} />
+}
+
+// Highlights the phrase's focus expression (phrases.focus_text — today only the
+// "desconocidas" playlist sets it). Phrases without it render as plain text.
+function renderFocusText(text, focus) {
+  if (!text) return text
+  const at = focus ? text.toLowerCase().indexOf(focus.toLowerCase()) : -1
+  if (at < 0) return text
+  const end = at + focus.length
+  return (
+    <>
+      {text.slice(0, at)}
+      <span className="text-sky-300 underline decoration-sky-500 decoration-4 underline-offset-[6px]">{text.slice(at, end)}</span>
+      {text.slice(end)}
+    </>
+  )
 }
 
 function fmtMMSS(sec) {
