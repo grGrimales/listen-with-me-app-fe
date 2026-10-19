@@ -12,7 +12,19 @@ const KIND_LABELS = { phrases: '💬', vocab: '📗', story_words: '📖' }
 
 // Lowercase + strip accents, mirroring the backend's folding, for highlighting.
 const foldChar = c => c.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
-const searchTokens = q => [...(q || '')].map(foldChar).join('').split(/\s+/).filter(Boolean)
+// A leading space anchors the first word to a word start, a trailing space the last
+// word to a word end (same rule as the backend).
+function searchTokens(q) {
+  const words = [...(q || '')].map(foldChar).join('').split(/\s+/).filter(Boolean)
+  const tokens = words.map(word => ({ word, start: false, end: false }))
+  if (tokens.length) {
+    tokens[0].start = /^\s/.test(q)
+    tokens[tokens.length - 1].end = /\s$/.test(q)
+  }
+  return tokens
+}
+
+const isWordChar = c => c !== undefined && /[\p{L}\p{N}]/u.test(c)
 
 // Wraps every occurrence of the search words in <mark>, matching accent-insensitively
 // against the original text (map[] points each folded char back to its original char).
@@ -23,11 +35,17 @@ function highlightMatches(text, tokens) {
   const map = []
   chars.forEach((c, i) => { for (const ch of foldChar(c)) { normStr += ch; map.push(i) } })
   const marked = new Array(chars.length).fill(false)
-  for (const t of tokens) {
+  for (const { word, start, end } of tokens) {
     let from = 0, at
-    while ((at = normStr.indexOf(t, from)) !== -1) {
-      for (let k = at; k < at + t.length; k++) marked[map[k]] = true
-      from = at + t.length
+    while ((at = normStr.indexOf(word, from)) !== -1) {
+      const okStart = !start || !isWordChar(normStr[at - 1])
+      const okEnd = !end || !isWordChar(normStr[at + word.length])
+      if (okStart && okEnd) {
+        for (let k = at; k < at + word.length; k++) marked[map[k]] = true
+        from = at + word.length
+      } else {
+        from = at + 1
+      }
     }
   }
   const parts = []
@@ -231,9 +249,10 @@ export default function SearchPage() {
   const tokens = useMemo(() => searchTokens(query), [query])
   const phraseParam = phraseSel ? [...phraseSel].sort((a, b) => a - b) : null
   const storyParam = storySel ? [...storySel].sort((a, b) => a - b) : null
+  // Edge spaces matter (word anchors), so collapse them to one instead of trimming.
   const searchKey = tokens.length === 0 || nothingSelected
     ? ''
-    : JSON.stringify([query.trim(), phraseParam, storyParam])
+    : JSON.stringify([query.replace(/^\s+/, ' ').replace(/\s+$/, ' '), phraseParam, storyParam])
 
   // Debounced fetch; responses from stale keys are ignored.
   useEffect(() => {
