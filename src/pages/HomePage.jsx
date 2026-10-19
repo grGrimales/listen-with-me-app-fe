@@ -587,6 +587,7 @@ export default function HomePage() {
               </Link>
             </>
           )}
+          <Link to="/search" className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition">🔎 Buscar</Link>
           <Link to="/stats" className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition">📊 Stats</Link>
           <Link to="/playlists" className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition flex items-center gap-1.5">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

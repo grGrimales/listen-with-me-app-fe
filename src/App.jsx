@@ -23,6 +23,7 @@ import StoryPhrasePlaylistsPage from './pages/StoryPhrasePlaylistsPage'
 import PhraseZenPage from './pages/PhraseZenPage'
 import PhraseZenStatsPage from './pages/PhraseZenStatsPage'
 import PhraseEvaluationPage from './pages/PhraseEvaluationPage'
+import SearchPage from './pages/SearchPage'
 
 export default function App() {
   return (
@@ -180,6 +181,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <PhraseEvaluationPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/search"
+            element={
+              <ProtectedRoute>
+                <SearchPage />
               </ProtectedRoute>
             }
           />

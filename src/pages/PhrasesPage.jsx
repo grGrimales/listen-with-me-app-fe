@@ -103,6 +103,12 @@ export default function PhrasesPage() {
             >
               📊 Stats
             </Link>
+            <Link
+              to="/search"
+              className="text-xs font-bold text-stone-500 hover:text-amber-700 border border-stone-200 hover:border-amber-400 rounded-xl px-3 py-2 transition"
+            >
+              🔎 Buscar
+            </Link>
           </div>
         </div>
 

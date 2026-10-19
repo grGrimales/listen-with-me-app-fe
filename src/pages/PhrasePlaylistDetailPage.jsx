@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { getPhrasePlaylist, logPhraseReview, ratePhrase, setPhrasePlaylistFavorite, generatePhraseAudio, generatePollyAudio, addPhraseVocabulary, getPhraseVocabularyInfo } from '../api/phrases'
 import PhrasePlaylistShareModal from '../components/PhrasePlaylistShareModal'
 import GroupMultiSelect from '../components/GroupMultiSelect'
+import { SORT_OPTIONS, shuffleArray } from '../utils/phraseSort'
 
 const LANG_LABELS = { en: 'English', pt: 'Português' }
 const LANG_FLAGS  = { en: '🇺🇸', pt: '🇧🇷' }
@@ -17,15 +18,6 @@ const REPEAT_PAUSE_MS = 600
 // Focus-expression playback: small margins so the first/last sound isn't clipped.
 const FOCUS_PAD_BEFORE_MS = 40
 const FOCUS_PAD_AFTER_MS = 120
-
-const SORT_OPTIONS = [
-  { value: 'playlist',       label: '📋 Playlist order' },
-  { value: 'newest',         label: '🆕 Newest first' },
-  { value: 'oldest',         label: '🕰️ Oldest first' },
-  { value: 'least_reviewed', label: '📉 Least reviewed' },
-  { value: 'random',         label: '🎲 Random' },
-  { value: 'srs',            label: '🧠 Smart review (SRS)' },
-]
 
 const SESSION_SIZES = [5, 10, 20, 30, 0] // 0 = All
 
@@ -64,16 +56,6 @@ function findFocusSegment(focus, words) {
     if (ok) return { startMs: words[i].start_ms, endMs: words[i + tokens.length - 1].end_ms }
   }
   return null
-}
-
-// Simple deterministic shuffle
-function shuffleArray(arr) {
-  const a = [...arr]
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[a[i], a[j]] = [a[j], a[i]]
-  }
-  return a
 }
 
 export default function PhrasePlaylistDetailPage() {
@@ -769,6 +751,13 @@ export default function PhrasePlaylistDetailPage() {
                       </span>
                     )
                   )}
+                  <Link
+                    to="/search"
+                    title="Buscar en tus playlists de frases e historias"
+                    className="text-xs font-bold text-stone-500 hover:text-amber-700 border border-stone-200 hover:border-amber-400 rounded-lg px-3 py-1.5 transition"
+                  >
+                    🔎 Buscar
+                  </Link>
                   <Link
                     to={`/phrases/${playlist.id}/evaluation`}
                     title="Writing evaluation — type the phrase from Spanish"

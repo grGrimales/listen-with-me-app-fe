@@ -167,3 +167,15 @@ export function removePlaylistShare(playlistId, userId, token) {
     method: 'DELETE',
   })
 }
+
+export function getSearchSources(token) {
+  return request('/api/search/sources', token)
+}
+
+// phrasePlaylistIds / storyPlaylistIds: null = all, [] = none, [ids] = only those.
+export function searchContent(q, phrasePlaylistIds, storyPlaylistIds, token) {
+  const params = new URLSearchParams({ q })
+  if (phrasePlaylistIds) params.set('phrase_playlists', phrasePlaylistIds.join(','))
+  if (storyPlaylistIds) params.set('story_playlists', storyPlaylistIds.join(','))
+  return request(`/api/search?${params}`, token)
+}
