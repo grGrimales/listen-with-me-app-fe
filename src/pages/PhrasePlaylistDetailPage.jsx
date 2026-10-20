@@ -230,7 +230,9 @@ export default function PhrasePlaylistDetailPage() {
     while ((m = vocabRegex.exec(text)) !== null) {
       if (m.index > lastIndex) parts.push({ t: text.slice(lastIndex, m.index), h: false })
       const matched = m[0]
-      const word = vocabWords.find(w => w.text.toLowerCase() === matched.toLowerCase())
+      // The same word can be saved once per phrase: prefer the copy saved from this one.
+      const same = vocabWords.filter(w => w.text.toLowerCase() === matched.toLowerCase())
+      const word = same.find(w => w.source_phrase_id === current?.id) || same[0]
       parts.push({ t: matched, h: true, word })
       lastIndex = vocabRegex.lastIndex
       if (m.index === vocabRegex.lastIndex) vocabRegex.lastIndex++ // guard against zero-length matches
@@ -242,7 +244,7 @@ export default function PhrasePlaylistDetailPage() {
           key={i}
           onClick={e => { e.stopPropagation(); playVocabWord(p.word) }}
           title="Click to hear · saved in your vocab"
-          className="bg-amber-200/70 hover:bg-amber-300 text-stone-800 rounded px-1 py-0 transition cursor-pointer inline"
+          className={`hover:bg-amber-300 text-stone-800 rounded px-1 py-0 transition cursor-pointer inline ${p.word && pollyPlaying === `word-${p.word.id}` ? 'bg-amber-300 animate-pulse' : 'bg-amber-200/70'}`}
         >
           {p.t}
         </button>
@@ -261,7 +263,7 @@ export default function PhrasePlaylistDetailPage() {
       if (res.phrase_created) {
         setVocabCount(n => n + 1)
         setVocabWords(prev => [...prev, {
-          id: res.phrase_id, text: selection,
+          id: res.phrase_id, text: selection, source_phrase_id: current.id,
           polly_audio_url_female: '', polly_audio_url_male: '',
         }])
       }
@@ -450,17 +452,16 @@ export default function PhrasePlaylistDetailPage() {
     else audio.addEventListener('loadedmetadata', startAndBound, { once: true })
   }, [current, stopAudio])
 
-  // Plays only the focus expression (current.focus_text) out of the phrase's own audio,
-  // locating it with the per-word timestamps and stopping via rAF (timeupdate's ~250ms
-  // would bleed into the next word). Falls back to the whole phrase when the audio has
-  // no timestamps (e.g. old Polly audio) or the expression can't be matched.
-  const playFocusSegment = useCallback(async () => {
-    if (!current?.focus_text) return
+  // Plays only `spanText` (the focus expression or a saved vocab word) out of the phrase's
+  // own audio, locating it with the per-word timestamps and stopping via rAF (timeupdate's
+  // ~250ms would bleed into the next word). Calls `fallback` when the audio has no
+  // timestamps (e.g. old Polly audio) or the text can't be matched.
+  const playPhraseSpan = useCallback(async (spanText, playingKey, fallback) => {
+    if (!spanText) return
     stopAudio()
     const res = await ensureAudio()
-    if (!res) return
-    const seg = findFocusSegment(current.focus_text, res.words)
-    if (!seg) { playPhraseAudio(); return }
+    const seg = res ? findFocusSegment(spanText, res.words) : null
+    if (!seg) { fallback?.(); return }
 
     const audio = new Audio(res.url)
     setCurrentAudio(audio)
@@ -480,10 +481,10 @@ export default function PhrasePlaylistDetailPage() {
     const startAndBound = () => {
       try { audio.currentTime = startSec } catch { /* ignore */ }
       audio.play().then(() => {
-        setPollyPlaying('focus')
+        setPollyPlaying(playingKey)
         segStopRef.current = requestAnimationFrame(tick)
       }).catch(err => {
-        if (err && err.name !== 'AbortError') console.error('Focus segment playback:', err)
+        if (err && err.name !== 'AbortError') console.error('Phrase span playback:', err)
         finish()
       })
     }
@@ -491,7 +492,13 @@ export default function PhrasePlaylistDetailPage() {
     audio.onerror = finish
     if (audio.readyState >= 1) startAndBound()
     else audio.addEventListener('loadedmetadata', startAndBound, { once: true })
-  }, [current, stopAudio, ensureAudio, playPhraseAudio])
+  }, [stopAudio, ensureAudio])
+
+  // Plays only the focus expression (current.focus_text); falls back to the whole phrase.
+  const playFocusSegment = useCallback(() => {
+    if (!current?.focus_text) return
+    playPhraseSpan(current.focus_text, 'focus', playPhraseAudio)
+  }, [current, playPhraseSpan, playPhraseAudio])
 
   // Renders the phrase with its focus expression as a clickable highlight (plays just
   // that part); the rest of the text keeps the saved-vocab highlights.
@@ -580,8 +587,8 @@ export default function PhrasePlaylistDetailPage() {
     playOnce()
   }, [current, repeatPlaying, stopAudio, ensureAudioURL, playStorySegmentOnce])
 
-  // Play a saved vocab word's audio. Doesn't log a review — pure playback.
-  const playVocabWord = useCallback(async (word, gender = 'female') => {
+  // Play a saved vocab word's own Polly audio (fallback when the phrase audio can't be cut).
+  const playVocabWordPolly = useCallback(async (word, gender = 'female') => {
     if (!word) return
     stopAudio()
     const cached = gender === 'male' ? word.polly_audio_url_male : word.polly_audio_url_female
@@ -601,6 +608,16 @@ export default function PhrasePlaylistDetailPage() {
       console.error('Vocab audio failed:', err)
     }
   }, [token, stopAudio])
+
+  // Play a saved vocab word clicked inside the phrase: cut it from the phrase's own audio
+  // so it sounds exactly as in context. Story-linked phrases have no audio of their own,
+  // and old audio without timestamps can't be cut — both use the word's Polly audio.
+  // Doesn't log a review — pure playback.
+  const playVocabWord = useCallback((word) => {
+    if (!word) return
+    if (!current || current.source_audio_url) { playVocabWordPolly(word); return }
+    playPhraseSpan(word.text, `word-${word.id}`, () => playVocabWordPolly(word))
+  }, [current, playPhraseSpan, playVocabWordPolly])
 
   // Reset reveal when display mode changes so the challenge stays valid
   useEffect(() => { setRevealed(false) }, [displayMode])
@@ -1041,6 +1058,16 @@ export default function PhrasePlaylistDetailPage() {
                       {current.pronunciation_es && (
                         <p className="text-sm text-stone-400 italic">
                           <span className="font-mono">{current.pronunciation_es}</span>
+                        </p>
+                      )}
+                      {current.vocab_source_text && (
+                        <p className="text-sm text-stone-500 italic mt-2">
+                          En la frase: “{current.vocab_source_text}”
+                        </p>
+                      )}
+                      {current.vocab_notes && (
+                        <p className="text-sm text-stone-600 text-left whitespace-pre-line bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 mt-3">
+                          {current.vocab_notes}
                         </p>
                       )}
                     </div>
