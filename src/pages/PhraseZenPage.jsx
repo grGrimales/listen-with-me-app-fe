@@ -360,7 +360,9 @@ function PlayerScreen({ config, onEnd }) {
     const picked = config.groupIds && config.groupIds.length > 0
       ? (pl.groups || []).filter(g => config.groupIds.includes(g.id))
       : (pl.groups || [])
-    let phrases = picked.flatMap(g => g.phrases || []).filter(p => p && p.text)
+    // Only phrases already reviewed at least once: relax mode is for listening to what
+    // you've studied, not for meeting new phrases.
+    let phrases = picked.flatMap(g => g.phrases || []).filter(p => p && p.text && p.review_count > 0)
     phrases = sortPhrases(phrases, config.order)
     if (config.count > 0) phrases = phrases.slice(0, config.count)
     if (phrases.length === 0) return []
@@ -370,11 +372,11 @@ function PlayerScreen({ config, onEnd }) {
     const needGen = []
     for (const p of phrases) {
       if (p.source_audio_url) {
-        descriptors.push({ id: p.id, text: p.text, focus: p.focus_text, url: p.source_audio_url, isSegment: true,
+        descriptors.push({ id: p.id, text: p.text, tr: p.translation_es, focus: p.focus_text, url: p.source_audio_url, isSegment: true,
           start: (p.source_start_ms || 0) / 1000, end: (p.source_end_ms || 0) / 1000 })
       } else {
         const cached = p.polly_audio_url_female
-        if (cached) descriptors.push({ id: p.id, text: p.text, focus: p.focus_text, url: cached, isSegment: false })
+        if (cached) descriptors.push({ id: p.id, text: p.text, tr: p.translation_es, focus: p.focus_text, url: cached, isSegment: false })
         else needGen.push(p)
       }
     }
@@ -385,7 +387,7 @@ function PlayerScreen({ config, onEnd }) {
         if (cancelledRef.current) return []
         try {
           const { audio_url } = await generatePhraseAudio(needGen[i].id, token)
-          descriptors.push({ id: needGen[i].id, text: needGen[i].text, focus: needGen[i].focus_text, url: audio_url, isSegment: false })
+          descriptors.push({ id: needGen[i].id, text: needGen[i].text, tr: needGen[i].translation_es, focus: needGen[i].focus_text, url: audio_url, isSegment: false })
         } catch (e) { console.error('zen generate audio failed', needGen[i].id, e) }
         if (showProgress) setProgress({ done: i + 1, total: needGen.length })
       }
@@ -489,7 +491,7 @@ function PlayerScreen({ config, onEnd }) {
       try {
         const descs = await buildDescriptors(true)
         if (cancelledRef.current) return
-        if (!descs || descs.length === 0) { setError('No audio available for these phrases.'); setPhase('error'); return }
+        if (!descs || descs.length === 0) { setError("No reviewed phrases with audio here yet. Review some phrases first, then come back to relax."); setPhase('error'); return }
         queueRef.current = descs
         setQueue(descs)
         idxRef.current = 0
@@ -615,12 +617,9 @@ function PlayerScreen({ config, onEnd }) {
       </header>
 
       <main className="flex-1 flex flex-col items-center justify-center px-6 py-8 max-w-md mx-auto w-full gap-8">
-        <div className="w-40 h-40 rounded-[2rem] bg-gradient-to-br from-emerald-600/20 to-stone-900 border border-stone-800 shadow-2xl flex items-center justify-center text-6xl">
-          {isPlaying ? '🔊' : '🎧'}
-        </div>
-
-        <div className="text-center w-full">
+        <div className="text-center w-full space-y-3">
           <p className="text-2xl sm:text-3xl font-bold text-stone-100 leading-snug">{renderFocusText(current?.text, current?.focus)}</p>
+          {current?.tr && <p className="text-lg text-emerald-400/80 font-medium leading-snug">{current.tr}</p>}
         </div>
 
         {/* Repeat dots */}
