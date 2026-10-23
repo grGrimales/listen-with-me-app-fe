@@ -41,6 +41,7 @@ function sortPhrases(list, order) {
 function SetupScreen({ onStart, initialPlaylistId }) {
   const { token } = useAuth()
   const [normal, setNormal] = useState([])
+  const [vocab, setVocab] = useState([])
   const [fromStories, setFromStories] = useState([])
   const [loading, setLoading] = useState(true)
   const [playlistId, setPlaylistId] = useState(initialPlaylistId || null)
@@ -59,9 +60,13 @@ function SetupScreen({ onStart, initialPlaylistId }) {
 
   useEffect(() => {
     Promise.all([
-      listPhrasePlaylists(token).catch(() => []),
+      listPhrasePlaylists(token, undefined, { includeVocab: true }).catch(() => []),
       listStoryPhrasePlaylists(token).catch(() => []),
-    ]).then(([n, s]) => { setNormal(n); setFromStories(s) })
+    ]).then(([n, s]) => {
+      setNormal(n.filter(p => !p.parent_playlist_id))
+      setVocab(n.filter(p => p.parent_playlist_id))
+      setFromStories(s)
+    })
       .finally(() => setLoading(false))
   }, [token])
 
@@ -85,13 +90,14 @@ function SetupScreen({ onStart, initialPlaylistId }) {
 
   const allById = {}
   normal.forEach(p => { allById[p.id] = { id: p.id, name: p.name, type: 'normal' } })
+  vocab.forEach(p => { allById[p.id] = { id: p.id, name: p.name, type: 'vocab' } })
   fromStories.forEach(p => { allById[p.id] = { id: p.id, name: p.name, type: 'story' } })
   const selected = playlistId ? allById[playlistId] : null
 
   function handleStart() {
     if (!playlistId) return
     onStart({
-      playlistId, groupIds, order, count, repeats, pauseMs: Math.round(pause * 1000),
+      playlistId, isVocab: allById[playlistId]?.type === 'vocab', groupIds, order, count, repeats, pauseMs: Math.round(pause * 1000),
       sessionMode, timeMs: sessionMode === 'time' ? minutes * 60000 : 0,
     })
   }
@@ -127,7 +133,7 @@ function SetupScreen({ onStart, initialPlaylistId }) {
         {/* Playlist picker */}
         <section className="w-full">
           <label className="block text-xs font-bold uppercase tracking-widest text-stone-500 mb-3">Playlist</label>
-          {normal.length === 0 && fromStories.length === 0 ? (
+          {normal.length === 0 && vocab.length === 0 && fromStories.length === 0 ? (
             <p className="text-sm text-stone-600 bg-stone-900 rounded-xl px-4 py-3 border border-stone-800">
               You have no phrase playlists yet.
             </p>
@@ -138,6 +144,16 @@ function SetupScreen({ onStart, initialPlaylistId }) {
                   <p className="text-[10px] font-bold uppercase tracking-widest text-stone-600 mb-1.5">💬 Your playlists</p>
                   <div className="flex flex-col gap-1.5">
                     {normal.map(p => (
+                      <PlaylistRow key={p.id} p={p} active={playlistId === p.id} onClick={() => setPlaylistId(p.id)} />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {vocab.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-stone-600 mb-1.5">📗 Vocabulary</p>
+                  <div className="flex flex-col gap-1.5">
+                    {vocab.map(p => (
                       <PlaylistRow key={p.id} p={p} active={playlistId === p.id} onClick={() => setPlaylistId(p.id)} />
                     ))}
                   </div>
@@ -246,6 +262,12 @@ function SetupScreen({ onStart, initialPlaylistId }) {
             </>
           )}
         </section>
+
+        {selected?.type === 'vocab' && (
+          <p className="w-full text-[11px] text-stone-600 bg-stone-900 rounded-xl px-4 py-3 border border-stone-800">
+            📗 Each word shows its translation, pronunciation and meaning.
+          </p>
+        )}
 
         {selected?.type === 'story' && (
           <p className="w-full text-[11px] text-stone-600 bg-stone-900 rounded-xl px-4 py-3 border border-stone-800">
@@ -372,11 +394,11 @@ function PlayerScreen({ config, onEnd }) {
     const needGen = []
     for (const p of phrases) {
       if (p.source_audio_url) {
-        descriptors.push({ id: p.id, text: p.text, tr: p.translation_es, focus: p.focus_text, url: p.source_audio_url, isSegment: true,
+        descriptors.push({ id: p.id, text: p.text, tr: p.translation_es, focus: p.focus_text, ...vocabExtras(p), url: p.source_audio_url, isSegment: true,
           start: (p.source_start_ms || 0) / 1000, end: (p.source_end_ms || 0) / 1000 })
       } else {
         const cached = p.polly_audio_url_female
-        if (cached) descriptors.push({ id: p.id, text: p.text, tr: p.translation_es, focus: p.focus_text, url: cached, isSegment: false })
+        if (cached) descriptors.push({ id: p.id, text: p.text, tr: p.translation_es, focus: p.focus_text, ...vocabExtras(p), url: cached, isSegment: false })
         else needGen.push(p)
       }
     }
@@ -387,7 +409,7 @@ function PlayerScreen({ config, onEnd }) {
         if (cancelledRef.current) return []
         try {
           const { audio_url } = await generatePhraseAudio(needGen[i].id, token)
-          descriptors.push({ id: needGen[i].id, text: needGen[i].text, tr: needGen[i].translation_es, focus: needGen[i].focus_text, url: audio_url, isSegment: false })
+          descriptors.push({ id: needGen[i].id, text: needGen[i].text, tr: needGen[i].translation_es, focus: needGen[i].focus_text, ...vocabExtras(needGen[i]), url: audio_url, isSegment: false })
         } catch (e) { console.error('zen generate audio failed', needGen[i].id, e) }
         if (showProgress) setProgress({ done: i + 1, total: needGen.length })
       }
@@ -619,7 +641,13 @@ function PlayerScreen({ config, onEnd }) {
       <main className="flex-1 flex flex-col items-center justify-center px-6 py-8 max-w-md mx-auto w-full gap-8">
         <div className="text-center w-full space-y-3">
           <p className="text-2xl sm:text-3xl font-bold text-stone-100 leading-snug">{renderFocusText(current?.text, current?.focus)}</p>
+          {config.isVocab && current?.pron && <p className="text-base text-stone-500 font-mono">/{current.pron}/</p>}
           {current?.tr && <p className="text-lg text-emerald-400/80 font-medium leading-snug">{current.tr}</p>}
+          {config.isVocab && current?.meaning && (
+            <p className="text-sm text-amber-200/80 leading-relaxed bg-amber-500/5 border border-amber-500/20 rounded-2xl px-4 py-3 text-left">
+              {current.meaning}
+            </p>
+          )}
         </div>
 
         {/* Repeat dots */}
@@ -691,6 +719,14 @@ export default function PhraseZenPage() {
   if (screen === 'setup') return <SetupScreen initialPlaylistId={initialPlaylistId} onStart={cfg => { setConfig(cfg); setScreen('player') }} />
   if (screen === 'player') return <PlayerScreen config={config} onEnd={n => { setCount(n); setScreen('complete') }} />
   return <CompleteScreen count={count} onRestart={() => { setConfig(null); setScreen('setup') }} />
+}
+
+// Pronunciation and the "Significado:" line of vocab_notes (the ficha of the
+// "📗 Vocab · …" playlists); falls back to the ficha's first line.
+function vocabExtras(p) {
+  const lines = (p.vocab_notes || '').split('\n').map(l => l.trim()).filter(Boolean)
+  const line = lines.find(l => /^significado\s*:/i.test(l)) || lines[0] || ''
+  return { pron: p.pronunciation_es || '', meaning: line.replace(/^significado\s*:\s*/i, '') }
 }
 
 // Highlights the phrase's focus expression (phrases.focus_text — today only the

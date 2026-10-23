@@ -15,8 +15,12 @@ async function request(path, token, options = {}) {
   return data
 }
 
-export function listPhrasePlaylists(token, language) {
-  const qs = language ? `?language=${encodeURIComponent(language)}` : ''
+// includeVocab also returns the "📗 Vocab · …" child playlists (they carry parent_playlist_id).
+export function listPhrasePlaylists(token, language, { includeVocab = false } = {}) {
+  const params = new URLSearchParams()
+  if (language) params.set('language', language)
+  if (includeVocab) params.set('include_vocab', '1')
+  const qs = params.toString() ? `?${params}` : ''
   return request(`/api/phrase-playlists${qs}`, token)
 }
 
