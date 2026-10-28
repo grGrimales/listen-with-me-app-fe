@@ -68,7 +68,7 @@ export default function PhrasePlaylistDetailPage() {
   const [playlist, setPlaylist] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [sortBy, setSortBy] = useState('random')
+  const [sortBy, setSortBy] = useState('least_reviewed')
   const [sessionSize, setSessionSize] = useState(() => {
     try {
       const v = localStorage.getItem('phrase.sessionSize')
