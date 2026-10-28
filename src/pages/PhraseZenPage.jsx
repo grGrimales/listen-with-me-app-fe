@@ -82,7 +82,8 @@ function SetupScreen({ onStart, initialPlaylistId }) {
     getPhrasePlaylist(playlistId, token)
       .then(pl => {
         if (cancelled) return
-        setGroups((pl.groups || []).map(g => ({ id: g.id, name: g.name, count: (g.phrases || []).length })))
+        // Count only reviewed phrases: those are the ones relax mode plays.
+        setGroups((pl.groups || []).map(g => ({ id: g.id, name: g.name, count: (g.phrases || []).filter(p => p.review_count > 0).length })))
       })
       .catch(() => { if (!cancelled) setGroups([]) })
       .finally(() => { if (!cancelled) setGroupsLoading(false) })

@@ -103,13 +103,15 @@ export default function PhraseEvaluationPage() {
     try { localStorage.setItem('phraseEval.sessionSize', String(sessionSize)) } catch { /* noop */ }
   }, [sessionSize])
 
+  // Counts only the phrases that can be asked: reviewed at least once (see the deck below).
   const groupOptions = useMemo(
-    () => (playlist?.groups || []).map(g => ({ id: g.id, name: g.name, count: g.phrases.length })),
+    () => (playlist?.groups || []).map(g => ({ id: g.id, name: g.name, count: g.phrases.filter(p => p.review_count > 0).length })),
     [playlist?.groups]
   )
 
   // Build the deck from the selected groups, ordered by the chosen strategy.
-  // Only phrases that actually have a Spanish translation can be prompted.
+  // Only phrases that actually have a Spanish translation can be prompted, and only the
+  // ones this user has reviewed at least once: the exam tests what you've studied.
   useEffect(() => {
     if (!playlist) return
     const groups = groupFilterIds.length > 0
@@ -117,7 +119,7 @@ export default function PhraseEvaluationPage() {
       : playlist.groups
     let flat = groups
       .flatMap(g => g.phrases.map(p => ({ ...p, groupName: g.name, groupId: g.id })))
-      .filter(p => (p.translation_es || '').trim())
+      .filter(p => p.review_count > 0 && (p.translation_es || '').trim())
 
     const stat = p => statsById[p.id] || EMPTY_STAT
     switch (sortBy) {
@@ -342,7 +344,7 @@ export default function PhraseEvaluationPage() {
                 <p className="text-stone-500">
                   {sortBy === 'never_right'
                     ? 'Nothing left here — you have gotten every phrase right at least once.'
-                    : 'No phrases with a Spanish translation to evaluate here.'}
+                    : 'No reviewed phrases to evaluate here yet. Review some phrases first, then come back for the exam.'}
                 </p>
               </div>
             ) : (
