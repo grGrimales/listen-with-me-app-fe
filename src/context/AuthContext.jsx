@@ -2,6 +2,12 @@ import { createContext, useContext, useState, useEffect } from 'react'
 
 const AuthContext = createContext(null)
 
+// Users with the "shared" role (and not admin) only get the /compartidos view.
+export function isSharedOnlyUser(user) {
+  const roles = user?.roles || []
+  return roles.includes('shared') && !roles.includes('admin')
+}
+
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem('token'))
   const [user, setUser] = useState(() => {
@@ -38,7 +44,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ token, user, saveAuth, logout, isAuthenticated: !!token, targetLanguage, setTargetLanguage }}>
+    <AuthContext.Provider value={{ token, user, saveAuth, logout, isAuthenticated: !!token, sharedOnly: isSharedOnlyUser(user), targetLanguage, setTargetLanguage }}>
       {children}
     </AuthContext.Provider>
   )

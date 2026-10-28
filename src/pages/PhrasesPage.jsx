@@ -109,6 +109,21 @@ export default function PhrasesPage() {
             >
               🔎 Buscar
             </Link>
+            {user?.roles?.includes('admin') && (
+              <Link
+                to="/phrases/shares"
+                className="text-xs font-bold text-stone-500 hover:text-sky-700 border border-stone-200 hover:border-sky-400 rounded-xl px-3 py-2 transition"
+              >
+                👥 Compartir
+              </Link>
+            )}
+            <Link
+              to="/compartidos"
+              title="Vista previa de lo que ven los usuarios con los que compartes"
+              className="text-xs font-bold text-stone-500 hover:text-sky-700 border border-stone-200 hover:border-sky-400 rounded-xl px-3 py-2 transition"
+            >
+              🤝 Vista compartida
+            </Link>
           </div>
         </div>
 

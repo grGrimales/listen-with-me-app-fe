@@ -174,7 +174,7 @@ function SourceSection({ title, items, selected, onChange, renderMeta }) {
 }
 
 export default function SearchPage() {
-  const { user, token, logout } = useAuth()
+  const { user, token, logout, sharedOnly } = useAuth()
   const navigate = useNavigate()
 
   const [sources, setSources] = useState(null) // {phrase_playlists, story_playlists}
@@ -359,14 +359,14 @@ export default function SearchPage() {
   return (
     <div className="min-h-screen bg-stone-50 flex flex-col">
       <header className="bg-white border-b border-stone-200 px-4 sm:px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-20">
-        <Link to="/" className="flex items-center gap-2">
+        <Link to={sharedOnly ? '/compartidos' : '/'} className="flex items-center gap-2">
           <span className="text-2xl">🎧</span>
           <span className="text-emerald-700 text-lg font-bold tracking-tight">Listen With Me</span>
         </Link>
 
         <div className="flex items-center gap-4">
-          <Link to="/phrases" className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition">
-            ← Phrases
+          <Link to={sharedOnly ? '/compartidos' : '/phrases'} className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition">
+            {sharedOnly ? '← Mis playlists' : '← Phrases'}
           </Link>
           <div className="flex items-center gap-2 bg-stone-100 hover:bg-stone-200 transition rounded-xl pl-3 pr-1 py-1">
             <span className="text-sm text-stone-600 font-medium leading-none">{user?.fullName?.split(' ')[0]}</span>
@@ -492,7 +492,7 @@ export default function SearchPage() {
         )}
 
         {showSources && sources && (
-          <div className="mb-4 bg-white border border-stone-200 rounded-2xl p-4 grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div className={`mb-4 bg-white border border-stone-200 rounded-2xl p-4 grid grid-cols-1 gap-5 ${sharedOnly ? '' : 'sm:grid-cols-2'}`}>
             <SourceSection
               title="💬 Playlists de frases"
               items={sources.phrase_playlists}
@@ -500,13 +500,13 @@ export default function SearchPage() {
               onChange={setPhraseSelection}
               renderMeta={p => `${KIND_LABELS[p.kind] || ''} ${p.phrase_count}`}
             />
-            <SourceSection
+            {!sharedOnly && <SourceSection
               title="📚 Playlists de historias"
               items={sources.story_playlists}
               selected={storySelected}
               onChange={setStorySelection}
               renderMeta={p => `${p.story_count} historia${p.story_count === 1 ? '' : 's'}`}
-            />
+            />}
           </div>
         )}
 
@@ -530,7 +530,8 @@ export default function SearchPage() {
         ) : (
           <>
             <p className="text-xs text-stone-400 mb-3">
-              {phraseCount} frase{phraseCount === 1 ? '' : 's'} · {storyCount} párrafo{storyCount === 1 ? '' : 's'} de historias
+              {phraseCount} frase{phraseCount === 1 ? '' : 's'}
+              {!sharedOnly && <> · {storyCount} párrafo{storyCount === 1 ? '' : 's'} de historias</>}
               {shown.truncated && ' — se muestran los primeros 300 de cada tipo; afina la búsqueda para ver más.'}
             </p>
             <ul className={`space-y-2 transition-opacity ${searching ? 'opacity-60' : ''}`}>

@@ -24,6 +24,8 @@ import PhraseZenPage from './pages/PhraseZenPage'
 import PhraseZenStatsPage from './pages/PhraseZenStatsPage'
 import PhraseEvaluationPage from './pages/PhraseEvaluationPage'
 import SearchPage from './pages/SearchPage'
+import SharedPlaylistsPage from './pages/SharedPlaylistsPage'
+import PhraseSharesPage from './pages/PhraseSharesPage'
 
 export default function App() {
   return (
@@ -153,6 +155,14 @@ export default function App() {
             }
           />
           <Route
+            path="/phrases/shares"
+            element={
+              <ProtectedRoute>
+                <PhraseSharesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/phrases/zen"
             element={
               <ProtectedRoute>
@@ -181,6 +191,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <PhraseEvaluationPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/compartidos"
+            element={
+              <ProtectedRoute>
+                <SharedPlaylistsPage />
               </ProtectedRoute>
             }
           />

@@ -144,6 +144,11 @@ export function getMyPhraseStatsDetailed(token) {
   return request('/api/phrase-stats/me/detailed', token)
 }
 
+// Every share on my own playlists: [{playlist_id, user_id, permission}].
+export function listMyShares(token) {
+  return request('/api/phrase-playlist-shares', token)
+}
+
 export function listPlaylistShares(playlistId, token) {
   return request(`/api/phrase-playlists/${playlistId}/shares`, token)
 }
@@ -169,6 +174,19 @@ export function updatePlaylistShare(playlistId, userId, permission, token) {
 export function removePlaylistShare(playlistId, userId, token) {
   return request(`/api/phrase-playlists/${playlistId}/shares/${userId}`, token, {
     method: 'DELETE',
+  })
+}
+
+// Admin only: every user with their roles, for the share manager page.
+export function adminListUsers(token) {
+  return request('/api/admin/users', token)
+}
+
+// Admin only: turns the "shared" role (only the /compartidos view) on or off.
+export function adminSetSharedRole(userId, enabled, token) {
+  return request(`/api/admin/users/${userId}/shared-role`, token, {
+    method: 'PUT',
+    body: JSON.stringify({ enabled }),
   })
 }
 

@@ -39,7 +39,7 @@ function sortPhrases(list, order) {
 
 // ── Setup Screen ──────────────────────────────────────────────────────────────
 function SetupScreen({ onStart, initialPlaylistId }) {
-  const { token } = useAuth()
+  const { token, sharedOnly } = useAuth()
   const [normal, setNormal] = useState([])
   const [vocab, setVocab] = useState([])
   const [fromStories, setFromStories] = useState([])
@@ -61,14 +61,15 @@ function SetupScreen({ onStart, initialPlaylistId }) {
   useEffect(() => {
     Promise.all([
       listPhrasePlaylists(token, undefined, { includeVocab: true }).catch(() => []),
-      listStoryPhrasePlaylists(token).catch(() => []),
+      // "shared" users have no story word playlists (and the endpoint is closed to them).
+      sharedOnly ? [] : listStoryPhrasePlaylists(token).catch(() => []),
     ]).then(([n, s]) => {
       setNormal(n.filter(p => !p.parent_playlist_id))
       setVocab(n.filter(p => p.parent_playlist_id))
       setFromStories(s)
     })
       .finally(() => setLoading(false))
-  }, [token])
+  }, [token, sharedOnly])
 
   // Load the selected playlist's groups so they can be filtered before starting.
   // Selecting another playlist resets the filter back to "all groups".
@@ -122,7 +123,7 @@ function SetupScreen({ onStart, initialPlaylistId }) {
   return (
     <div className="min-h-screen bg-stone-950 text-stone-100 flex flex-col">
       <header className="px-6 py-5 flex items-center justify-between border-b border-stone-800">
-        <Link to="/phrases" className="text-stone-500 hover:text-stone-300 transition text-sm font-medium">← Phrases</Link>
+        <Link to={sharedOnly ? '/compartidos' : '/phrases'} className="text-stone-500 hover:text-stone-300 transition text-sm font-medium">{sharedOnly ? '← Mis playlists' : '← Phrases'}</Link>
         <div className="flex items-center gap-2"><span className="text-2xl">🧘</span><span className="font-bold text-lg">Zen · Phrases</span></div>
         <Link to="/phrases/zen/stats" className="text-stone-500 hover:text-emerald-400 transition text-sm font-medium">📊 Stats</Link>
       </header>
@@ -693,6 +694,7 @@ function PlayerScreen({ config, onEnd }) {
 
 // ── Complete Screen ───────────────────────────────────────────────────────────
 function CompleteScreen({ count, onRestart }) {
+  const { sharedOnly } = useAuth()
   return (
     <div className="min-h-screen bg-stone-950 text-stone-100 flex flex-col items-center justify-center px-6 text-center gap-8">
       <div className="w-24 h-24 rounded-3xl bg-emerald-600/10 border border-emerald-600/20 flex items-center justify-center text-5xl">🧘</div>
@@ -702,7 +704,7 @@ function CompleteScreen({ count, onRestart }) {
       </div>
       <div className="flex flex-col gap-3 w-full max-w-xs">
         <button onClick={onRestart} className="w-full bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold py-4 rounded-2xl transition-all">New session</button>
-        <Link to="/phrases" className="w-full bg-stone-900 hover:bg-stone-800 text-stone-300 font-bold py-4 rounded-2xl transition-all text-center block">Back to phrases</Link>
+        <Link to={sharedOnly ? '/compartidos' : '/phrases'} className="w-full bg-stone-900 hover:bg-stone-800 text-stone-300 font-bold py-4 rounded-2xl transition-all text-center block">{sharedOnly ? 'Back to my playlists' : 'Back to phrases'}</Link>
       </div>
     </div>
   )

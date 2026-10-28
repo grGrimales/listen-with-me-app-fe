@@ -47,7 +47,7 @@ const EMPTY_STAT = { correct_count: 0, failed_count: 0, total_attempts: 0 }
 
 export default function PhraseEvaluationPage() {
   const { id } = useParams()
-  const { user, token, logout } = useAuth()
+  const { user, token, logout, sharedOnly } = useAuth()
   const navigate = useNavigate()
 
   const [playlist, setPlaylist] = useState(null)
@@ -244,7 +244,7 @@ export default function PhraseEvaluationPage() {
   return (
     <div className="min-h-screen bg-stone-50 flex flex-col">
       <header className="bg-white border-b border-stone-200 px-4 sm:px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-20">
-        <Link to="/" className="flex items-center gap-2">
+        <Link to={sharedOnly ? '/compartidos' : '/'} className="flex items-center gap-2">
           <span className="text-2xl">🎧</span>
           <span className="text-emerald-700 text-lg font-bold tracking-tight">Listen With Me</span>
         </Link>

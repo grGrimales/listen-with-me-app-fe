@@ -39,7 +39,9 @@ export default function PhraseStatsPage({
   fetchLeaderboard = getPhraseLeaderboard,
   L = REVIEW_LABELS,
 } = {}) {
-  const { user, token, logout } = useAuth()
+  const { user, token, logout, sharedOnly } = useAuth()
+  // Shared-only users see just their own numbers: no community leaderboard.
+  const homePath = sharedOnly ? '/compartidos' : '/phrases'
   const navigate = useNavigate()
 
   const [stats, setStats] = useState(null)
@@ -56,7 +58,7 @@ export default function PhraseStatsPage({
       try {
         const [s, lb] = await Promise.all([
           fetchStats(token),
-          fetchLeaderboard(token, 10),
+          sharedOnly ? null : fetchLeaderboard(token, 10),
         ])
         setStats(s)
         setLeaderboard(lb)
@@ -67,7 +69,7 @@ export default function PhraseStatsPage({
       }
     }
     load()
-  }, [token])
+  }, [token, sharedOnly])
 
   function handleLogout() {
     logout()
@@ -115,14 +117,14 @@ export default function PhraseStatsPage({
   return (
     <div className="min-h-screen bg-stone-50 flex flex-col">
       <header className="bg-white border-b border-stone-200 px-4 sm:px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-20">
-        <Link to="/" className="flex items-center gap-2">
+        <Link to={sharedOnly ? '/compartidos' : '/'} className="flex items-center gap-2">
           <span className="text-2xl">🎧</span>
           <span className="text-emerald-700 text-lg font-bold tracking-tight">Listen With Me</span>
         </Link>
 
         <div className="flex items-center gap-4">
-          <Link to="/phrases" className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition">
-            ← Back to Phrases
+          <Link to={homePath} className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition">
+            {sharedOnly ? '← Mis playlists' : '← Back to Phrases'}
           </Link>
           <div className="flex items-center gap-2 bg-stone-100 hover:bg-stone-200 transition rounded-xl pl-3 pr-1 py-1">
             <span className="text-sm text-stone-600 font-medium leading-none">{user?.fullName?.split(' ')[0]}</span>
@@ -159,7 +161,7 @@ export default function PhraseStatsPage({
             <p className="text-stone-500 max-w-md mx-auto mb-4">
               {L.emptyBody}
             </p>
-            <Link to="/phrases" className="inline-block bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 py-2.5 rounded-xl transition">
+            <Link to={homePath} className="inline-block bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 py-2.5 rounded-xl transition">
               Open playlists
             </Link>
           </div>
@@ -394,7 +396,7 @@ export default function PhraseStatsPage({
             )}
 
             {/* Leaderboard collapsible */}
-            <button
+            {!sharedOnly && <button
               onClick={() => setShowLeaderboard(v => !v)}
               className="w-full flex items-center justify-between px-6 py-4 bg-white border border-stone-200 rounded-2xl hover:bg-stone-50 transition mb-3"
             >
@@ -404,9 +406,9 @@ export default function PhraseStatsPage({
               <svg className={`w-4 h-4 text-stone-400 transition-transform ${showLeaderboard ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
               </svg>
-            </button>
+            </button>}
 
-            {showLeaderboard && (
+            {showLeaderboard && !sharedOnly && (
               <div className="bg-white rounded-2xl border border-stone-200 p-6">
                 <div className="mb-4 flex flex-wrap gap-2">
                   {PERIODS.map(p => (

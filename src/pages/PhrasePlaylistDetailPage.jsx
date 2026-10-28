@@ -60,7 +60,9 @@ function findFocusSegment(focus, words) {
 
 export default function PhrasePlaylistDetailPage() {
   const { id } = useParams()
-  const { user, token, logout } = useAuth()
+  const { user, token, logout, sharedOnly } = useAuth()
+  // Where "back" goes: the /compartidos view for users with the shared role.
+  const homePath = sharedOnly ? '/compartidos' : '/phrases'
   const navigate = useNavigate()
 
   const [playlist, setPlaylist] = useState(null)
@@ -293,7 +295,7 @@ export default function PhrasePlaylistDetailPage() {
       .then(() => setSessionReviews(n => n + 1))
       .catch(err => console.error('logPhraseReview:', err))
     if (isLast) {
-      navigate('/phrases')
+      navigate(homePath)
       return
     }
     setIndex(i => i + 1)
@@ -687,14 +689,14 @@ export default function PhrasePlaylistDetailPage() {
   return (
     <div className="min-h-screen bg-stone-50 flex flex-col">
       <header className="bg-white border-b border-stone-200 px-4 sm:px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-20">
-        <Link to="/" className="flex items-center gap-2">
+        <Link to={sharedOnly ? '/compartidos' : '/'} className="flex items-center gap-2">
           <span className="text-2xl">🎧</span>
           <span className="text-emerald-700 text-lg font-bold tracking-tight">Listen With Me</span>
         </Link>
 
         <div className="flex items-center gap-4">
-          <Link to="/phrases" className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition">
-            ← Back to Phrases
+          <Link to={homePath} className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition">
+            {sharedOnly ? '← Mis playlists' : '← Back to Phrases'}
           </Link>
           <div className="flex items-center gap-2 bg-stone-100 hover:bg-stone-200 transition rounded-xl pl-3 pr-1 py-1">
             <span className="text-sm text-stone-600 font-medium leading-none">{user?.fullName?.split(' ')[0]}</span>
@@ -747,7 +749,7 @@ export default function PhrasePlaylistDetailPage() {
                   </Link>
                 )}
                 <div className="ml-auto flex items-center gap-2">
-                  {playlist.parent_playlist_id ? null : (
+                  {playlist.parent_playlist_id || sharedOnly ? null : (
                     vocabChildId ? (
                       <Link
                         to={`/phrases/${vocabChildId}`}
@@ -782,7 +784,7 @@ export default function PhrasePlaylistDetailPage() {
                   >
                     ✍️ Evaluate
                   </Link>
-                  {(playlist.role === 'owner' || playlist.role === 'editor') && (
+                  {!sharedOnly && (playlist.role === 'owner' || playlist.role === 'editor') && (
                     <Link
                       to={`/phrases/${playlist.id}/manage`}
                       title="Edit phrases and groups"
@@ -1162,7 +1164,7 @@ export default function PhrasePlaylistDetailPage() {
       </main>
 
       {/* Floating "add to vocabulary" pill — appears when user highlights text within the target */}
-      {selection && (
+      {selection && !sharedOnly && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
           <button
             onClick={handleAddVocab}

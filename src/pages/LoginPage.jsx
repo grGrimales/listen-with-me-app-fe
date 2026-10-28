@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { login } from '../api/auth'
-import { useAuth } from '../context/AuthContext'
+import { useAuth, isSharedOnlyUser } from '../context/AuthContext'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -21,7 +21,7 @@ export default function LoginPage() {
     try {
       const data = await login(form.email, form.password)
       saveAuth(data.token, data.user)
-      navigate('/')
+      navigate(isSharedOnlyUser(data.user) ? '/compartidos' : '/')
     } catch (err) {
       setError(err.message)
     } finally {
