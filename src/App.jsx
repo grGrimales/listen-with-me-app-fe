@@ -13,6 +13,7 @@ import DeletedStoriesPage from './pages/DeletedStoriesPage'
 import StatsPage from './pages/StatsPage'
 import PlaylistsPage from './pages/PlaylistsPage'
 import ZenModePage from './pages/ZenModePage'
+import ZenReadPage from './pages/ZenReadPage'
 import PhrasesPage from './pages/PhrasesPage'
 import PhrasePlaylistDetailPage from './pages/PhrasePlaylistDetailPage'
 import PhraseStatsPage from './pages/PhraseStatsPage'
@@ -119,6 +120,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <ZenModePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/zen/read"
+            element={
+              <ProtectedRoute>
+                <ZenReadPage />
               </ProtectedRoute>
             }
           />

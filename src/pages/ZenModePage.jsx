@@ -101,7 +101,12 @@ const PARA_GAP_MS  = 1500  // small pause between paragraphs of a story
 const STORY_GAP_MS = 3500  // longer pause between stories
 
 // ── Setup Screen ─────────────────────────────────────────────────────────────
-function SetupScreen({ onStart }) {
+const ZEN_MODES = [
+  { mode: 'listen', to: '/zen',      icon: '🧘', label: 'Listen',     hint: 'Cover, title and queue' },
+  { mode: 'read',   to: '/zen/read', icon: '📖', label: 'Read along', hint: 'Large text, words lit as spoken' },
+]
+
+export function SetupScreen({ onStart, mode = 'listen', title = 'Zen Mode', icon = '🧘', startLabel = '🧘 Start Zen session' }) {
   const { token } = useAuth()
   const [playlists, setPlaylists]   = useState([])
   const [playlistId, setPlaylistId] = useState(null)
@@ -132,8 +137,8 @@ function SetupScreen({ onStart }) {
       <header className="px-6 py-5 flex items-center justify-between border-b border-stone-800">
         <Link to="/" className="text-stone-500 hover:text-stone-300 transition text-sm font-medium">← Library</Link>
         <div className="flex items-center gap-2">
-          <span className="text-2xl">🧘</span>
-          <span className="font-bold text-lg text-stone-100">Zen Mode</span>
+          <span className="text-2xl">{icon}</span>
+          <span className="font-bold text-lg text-stone-100">{title}</span>
         </div>
         <div className="w-24" />
       </header>
@@ -142,6 +147,27 @@ function SetupScreen({ onStart }) {
         <div className="text-center">
           <p className="text-stone-400 text-sm mt-2">Set up your listening session and relax.</p>
         </div>
+
+        {/* Mode: just listen, or read along while listening (/zen/read) */}
+        <section className="w-full">
+          <label className="block text-xs font-bold uppercase tracking-widest text-stone-500 mb-3">Mode</label>
+          <div className="grid grid-cols-2 gap-2">
+            {ZEN_MODES.map(m => (
+              <Link
+                key={m.mode}
+                to={m.to}
+                className={`flex flex-col gap-0.5 px-4 py-3 rounded-2xl border transition-all ${
+                  mode === m.mode
+                    ? 'bg-emerald-600 border-emerald-600 text-white'
+                    : 'bg-stone-900 border-stone-700 text-stone-300 hover:border-stone-500'
+                }`}
+              >
+                <span className="text-sm font-semibold">{m.icon} {m.label}</span>
+                <span className={`text-xs ${mode === m.mode ? 'text-emerald-100' : 'text-stone-500'}`}>{m.hint}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
 
         {/* Playlist */}
         <section className="w-full">
@@ -235,7 +261,7 @@ function SetupScreen({ onStart }) {
           onClick={handleStart}
           className="w-full bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold py-4 rounded-2xl transition-all shadow-2xl shadow-emerald-900/40 text-base"
         >
-          🧘 Start Zen session
+          {startLabel}
         </button>
       </main>
     </div>
@@ -737,16 +763,16 @@ function PlayerScreen({ config, onEnd }) {
 }
 
 // ── Complete Screen ───────────────────────────────────────────────────────────
-function CompleteScreen({ completed, onRestart }) {
+export function CompleteScreen({ completed, onRestart, icon = '🧘', modeLabel = 'Zen mode' }) {
   return (
     <div className="min-h-screen bg-stone-950 text-stone-100 flex flex-col items-center justify-center px-6 text-center gap-8">
       <div className="w-24 h-24 rounded-3xl bg-emerald-600/10 border border-emerald-600/20 flex items-center justify-center text-5xl">
-        🧘
+        {icon}
       </div>
       <div>
         <h2 className="text-3xl font-bold mb-2">Session complete!</h2>
         <p className="text-stone-400 text-lg">
-          You listened to <span className="text-emerald-400 font-bold">{completed}</span> {completed === 1 ? 'story' : 'stories'} in Zen mode.
+          You listened to <span className="text-emerald-400 font-bold">{completed}</span> {completed === 1 ? 'story' : 'stories'} in {modeLabel}.
         </p>
       </div>
       <div className="flex flex-col gap-3 w-full max-w-xs">

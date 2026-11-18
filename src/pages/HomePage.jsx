@@ -598,6 +598,9 @@ export default function HomePage() {
           <Link to="/zen" className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition">
             🧘 Zen Mode
           </Link>
+          <Link to="/zen/read" className="text-stone-500 hover:text-stone-800 text-sm font-semibold transition">
+            📖 Read along
+          </Link>
           <PhrasesDropdown />
 
           {/* Language selector */}
@@ -680,6 +683,10 @@ export default function HomePage() {
               <Link to="/zen" onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center gap-3 px-4 py-3 text-sm font-semibold text-stone-800 hover:bg-stone-800 hover:text-emerald-400 transition">
                 🧘 Zen Mode
+              </Link>
+              <Link to="/zen/read" onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-3 px-4 py-3 text-sm font-semibold text-stone-800 hover:bg-stone-800 hover:text-emerald-400 transition">
+                📖 Read along
               </Link>
               <Link to="/phrases" onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center gap-3 px-4 py-3 text-sm font-semibold text-stone-600 hover:bg-stone-50 transition">
