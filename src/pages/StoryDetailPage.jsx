@@ -497,7 +497,9 @@ export default function StoryDetailPage() {
     // Sort by length descending to match longer phrases first
     const sortedVocab = [...userVocab].sort((a, b) => b.phrase.length - a.phrase.length)
     const phrases = sortedVocab.map(v => v.phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-    const pattern = new RegExp(`(\\b(?:${phrases.join('|')})\\b)`, 'gi')
+    // Not glued to a letter on either side. \b would fail for phrases that start or
+    // end with punctuation ("all the time." followed by a space has no word boundary).
+    const pattern = new RegExp(`((?<!\\w)(?:${phrases.join('|')})(?!\\w))`, 'gi')
 
     const parts = text.split(pattern)
     return parts.map((part, i) => {
